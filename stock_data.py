@@ -43,29 +43,43 @@ class StockDataFetcher:
         if info_type == "Basic Info":
             # Get basic info as a Series and convert to DataFrame
             info = ticker.info
-            if info:
+            if info and isinstance(info, dict) and len(info) > 0:
                 return pd.DataFrame(list(info.items()), columns=['Attribute', 'Value']).set_index('Attribute')
             return pd.DataFrame()
         
         elif info_type == "Fast Info":
             # Get fast info (quick access to key stats)
             fast_info = ticker.fast_info
-            if fast_info:
+            if fast_info and isinstance(fast_info, dict) and len(fast_info) > 0:
                 return pd.DataFrame(list(fast_info.items()), columns=['Attribute', 'Value']).set_index('Attribute')
             return pd.DataFrame()
         
         elif info_type == "News":
             # Get recent news
             news = ticker.news
-            if news:
-                news_df = pd.DataFrame(news)
-                # Keep only relevant columns
-                cols_to_keep = ['title', 'publisher', 'link', 'providerPublishTime']
-                news_df = news_df[cols_to_keep].copy()
-                # Convert timestamp to readable date
-                news_df['providerPublishTime'] = pd.to_datetime(news_df['providerPublishTime'], unit='s')
-                news_df.rename(columns={'providerPublishTime': 'Published Date'}, inplace=True)
-                return news_df
+            if news and isinstance(news, list) and len(news) > 0:
+                # The structure has changed - news is now a list of dicts with 'id' and 'content' keys
+                formatted_news = []
+                for item in news:
+                    if 'content' in item and isinstance(item['content'], dict):
+                        content = item['content']
+                        news_item = {
+                            'title': content.get('title', ''),
+                            'provider': content.get('provider', {}).get('displayName', ''),
+                            'summary': content.get('summary', ''),
+                            'published_date': content.get('pubDate', ''),
+                            'url': content.get('clickThroughUrl', {}).get('url', '')
+                        }
+                        formatted_news.append(news_item)
+                
+                if formatted_news:
+                    news_df = pd.DataFrame(formatted_news)
+                    # Convert timestamp to readable date if needed
+                    if 'published_date' in news_df.columns:
+                        news_df['published_date'] = pd.to_datetime(news_df['published_date'])
+                    return news_df
+            
+            # Return empty DataFrame if no news or invalid format
             return pd.DataFrame()
         
         else:
