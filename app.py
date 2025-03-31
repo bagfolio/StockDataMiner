@@ -5,8 +5,44 @@ import plotly.express as px
 import yfinance as yf
 import os
 import time
+import numpy as np
 from database import DatabaseManager
 from stock_data import StockDataFetcher
+
+# Helper function to format numbers for better readability
+def format_number(val):
+    """Format numbers for better readability:
+    - Currency/large numbers with commas and 2 decimal places
+    - Percentages with 2 decimal places
+    - Dates remain unchanged
+    - Very small numbers in scientific notation
+    """
+    if pd.isna(val) or val is None:
+        return ''
+    
+    # Handle different types
+    if isinstance(val, (int, float, np.number)):
+        # Format percentages
+        if isinstance(val, float) and -1 <= val <= 1:
+            return f"{val:.2%}"
+        
+        # Format large numbers (millions+)
+        if abs(val) >= 1_000_000:
+            return f"${val:,.2f}"
+        
+        # Format medium numbers with commas
+        if abs(val) >= 1000:
+            return f"{val:,.2f}"
+            
+        # Very small numbers in scientific notation
+        if abs(val) < 0.001 and val != 0:
+            return f"{val:.2e}"
+            
+        # Other numbers with 2 decimal places
+        return f"{val:.2f}"
+    
+    # Return strings and other types as is
+    return val
 
 # Set page title and layout
 st.set_page_config(page_title="Stock Data Scraper", layout="wide")
@@ -95,7 +131,12 @@ if fetch_button:
                     tabs = st.tabs(list(all_data.keys()))
                     for i, (symbol, data) in enumerate(all_data.items()):
                         with tabs[i]:
-                            st.dataframe(data)
+                            # Format numeric columns for better readability
+                            formatted_data = data.copy()
+                            for col in formatted_data.select_dtypes(include=['number']).columns:
+                                formatted_data[col] = formatted_data[col].apply(format_number)
+                                
+                            st.dataframe(formatted_data)
                             
                             # Create visualization if possible
                             if selected_category == "Historical Data" and selected_info == "Price History":
@@ -116,7 +157,12 @@ if fetch_button:
                     symbol = list(all_data.keys())[0]
                     data = all_data[symbol]
                     
-                    st.dataframe(data)
+                    # Format numeric columns for better readability
+                    formatted_data = data.copy()
+                    for col in formatted_data.select_dtypes(include=['number']).columns:
+                        formatted_data[col] = formatted_data[col].apply(format_number)
+                        
+                    st.dataframe(formatted_data)
                     
                     # Create visualization if possible
                     if selected_category == "Historical Data" and selected_info == "Price History":
@@ -192,7 +238,12 @@ if stored_data:
                 
                 if stored_df is not None and not stored_df.empty:
                     st.subheader(f"Stored Data: {selected_stored_ticker} - {selected_stored_info}")
-                    st.dataframe(stored_df)
+                    # Format numeric columns for better readability
+                    formatted_df = stored_df.copy()
+                    for col in formatted_df.select_dtypes(include=['number']).columns:
+                        formatted_df[col] = formatted_df[col].apply(format_number)
+                        
+                    st.dataframe(formatted_df)
                     
                     # Export stored data as CSV
                     csv = stored_df.to_csv()

@@ -55,22 +55,50 @@ class StockDataFetcher:
             return pd.DataFrame()
         
         elif info_type == "News":
-            # Get recent news
-            news = ticker.news
-            if news and isinstance(news, list) and len(news) > 0:
+            # Get recent news - updated to handle newer yfinance versions
+            try:
+                # Get news data
+                news = ticker.news
+                
+                if news is None:
+                    return pd.DataFrame()
+                
+                if not isinstance(news, list):
+                    return pd.DataFrame()
+                
+                if len(news) == 0:
+                    return pd.DataFrame()
+                
                 # The structure has changed - news is now a list of dicts with 'id' and 'content' keys
                 formatted_news = []
                 for item in news:
-                    if 'content' in item and isinstance(item['content'], dict):
-                        content = item['content']
-                        news_item = {
-                            'title': content.get('title', ''),
-                            'provider': content.get('provider', {}).get('displayName', ''),
-                            'summary': content.get('summary', ''),
-                            'published_date': content.get('pubDate', ''),
-                            'url': content.get('clickThroughUrl', {}).get('url', '')
-                        }
-                        formatted_news.append(news_item)
+                    if not isinstance(item, dict):
+                        continue
+                        
+                    # Check if content exists and is a dictionary
+                    if 'content' not in item or not isinstance(item['content'], dict):
+                        continue
+                        
+                    content = item['content']
+                    
+                    # Get provider info safely
+                    provider_name = ''
+                    if 'provider' in content and isinstance(content['provider'], dict):
+                        provider_name = content['provider'].get('displayName', '')
+                    
+                    # Get URL safely
+                    url = ''
+                    if 'clickThroughUrl' in content and isinstance(content['clickThroughUrl'], dict):
+                        url = content['clickThroughUrl'].get('url', '')
+                    
+                    news_item = {
+                        'title': content.get('title', ''),
+                        'provider': provider_name,
+                        'summary': content.get('summary', ''),
+                        'published_date': content.get('pubDate', ''),
+                        'url': url
+                    }
+                    formatted_news.append(news_item)
                 
                 if formatted_news:
                     news_df = pd.DataFrame(formatted_news)
@@ -79,8 +107,11 @@ class StockDataFetcher:
                         news_df['published_date'] = pd.to_datetime(news_df['published_date'])
                     return news_df
             
-            # Return empty DataFrame if no news or invalid format
-            return pd.DataFrame()
+                # Return empty DataFrame if no news or invalid format
+                return pd.DataFrame()
+            except Exception as e:
+                print(f"Error processing news data: {str(e)}")
+                return pd.DataFrame()
         
         else:
             raise ValueError(f"Unknown general info type: {info_type}")
