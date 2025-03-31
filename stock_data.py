@@ -81,29 +81,51 @@ class StockDataFetcher:
         elif info_type == "Dividends":
             # Get dividend history
             dividends = ticker.dividends
-            if not dividends.empty:
-                return pd.DataFrame(dividends)
+            if dividends is not None:
+                if isinstance(dividends, pd.Series) and not dividends.empty:
+                    return pd.DataFrame(dividends)
+                elif isinstance(dividends, pd.DataFrame) and not dividends.empty:
+                    return dividends
+                elif isinstance(dividends, dict) and dividends:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(dividends)
             return pd.DataFrame()
         
         elif info_type == "Splits":
             # Get stock split history
             splits = ticker.splits
-            if not splits.empty:
-                return pd.DataFrame(splits)
+            if splits is not None:
+                if isinstance(splits, pd.Series) and not splits.empty:
+                    return pd.DataFrame(splits)
+                elif isinstance(splits, pd.DataFrame) and not splits.empty:
+                    return splits
+                elif isinstance(splits, dict) and splits:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(splits)
             return pd.DataFrame()
         
         elif info_type == "Actions":
             # Get dividend and split history combined
             actions = ticker.actions
-            if not actions.empty:
-                return actions
+            if actions is not None:
+                if isinstance(actions, pd.DataFrame) and not actions.empty:
+                    return actions
+                elif isinstance(actions, dict) and actions:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(actions)
             return pd.DataFrame()
         
         elif info_type == "Capital Gains":
             # Get capital gains (mainly for mutual funds)
             capital_gains = ticker.capital_gains
-            if not capital_gains.empty:
-                return pd.DataFrame(capital_gains)
+            if capital_gains is not None:
+                if isinstance(capital_gains, pd.Series) and not capital_gains.empty:
+                    return pd.DataFrame(capital_gains)
+                elif isinstance(capital_gains, pd.DataFrame) and not capital_gains.empty:
+                    return capital_gains
+                elif isinstance(capital_gains, dict) and capital_gains:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(capital_gains)
             return pd.DataFrame()
         
         else:
@@ -114,29 +136,45 @@ class StockDataFetcher:
         if info_type == "Income Statement":
             # Get annual income statement
             income_stmt = ticker.income_stmt
-            if not income_stmt.empty:
-                return income_stmt
+            if income_stmt is not None:
+                if isinstance(income_stmt, pd.DataFrame) and not income_stmt.empty:
+                    return income_stmt
+                elif isinstance(income_stmt, dict) and income_stmt:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(income_stmt)
             return pd.DataFrame()
         
         elif info_type == "Balance Sheet":
             # Get annual balance sheet
             balance_sheet = ticker.balance_sheet
-            if not balance_sheet.empty:
-                return balance_sheet
+            if balance_sheet is not None:
+                if isinstance(balance_sheet, pd.DataFrame) and not balance_sheet.empty:
+                    return balance_sheet
+                elif isinstance(balance_sheet, dict) and balance_sheet:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(balance_sheet)
             return pd.DataFrame()
         
         elif info_type == "Cash Flow":
             # Get annual cash flow statement
             cashflow = ticker.cashflow
-            if not cashflow.empty:
-                return cashflow
+            if cashflow is not None:
+                if isinstance(cashflow, pd.DataFrame) and not cashflow.empty:
+                    return cashflow
+                elif isinstance(cashflow, dict) and cashflow:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(cashflow)
             return pd.DataFrame()
         
         elif info_type == "Earnings":
             # Get earnings data
             earnings = ticker.earnings
-            if not earnings.empty:
-                return earnings
+            if earnings is not None:
+                if isinstance(earnings, pd.DataFrame) and not earnings.empty:
+                    return earnings
+                elif isinstance(earnings, dict) and earnings:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame.from_dict(earnings)
             return pd.DataFrame()
         
         else:
@@ -145,59 +183,91 @@ class StockDataFetcher:
     def _get_analysis_and_holdings(self, ticker, info_type):
         """Get analysis and holdings data for the stock."""
         if info_type == "Recommendations":
-            # Get analyst recommendations
+            # Get analyst recommendations (can be DataFrame or dict)
             recommendations = ticker.recommendations
-            if recommendations is not None and not recommendations.empty:
-                return recommendations
+            if recommendations is not None:
+                if isinstance(recommendations, pd.DataFrame) and not recommendations.empty:
+                    return recommendations
+                elif isinstance(recommendations, dict) and recommendations:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(recommendations.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         elif info_type == "Sustainability":
             # Get ESG sustainability scores
             sustainability = ticker.sustainability
-            if sustainability is not None and not sustainability.empty:
-                return sustainability
+            if sustainability is not None:
+                if isinstance(sustainability, pd.DataFrame) and not sustainability.empty:
+                    return sustainability
+                elif isinstance(sustainability, dict) and sustainability:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(sustainability.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         elif info_type == "Analyst Price Targets":
-            # Get analyst price targets
+            # Get analyst price targets (returns a dict, not DataFrame)
             targets = ticker.analyst_price_targets
-            if targets is not None and not targets.empty:
-                return targets
+            if targets is not None:
+                if isinstance(targets, pd.DataFrame) and not targets.empty:
+                    return targets
+                elif isinstance(targets, dict) and targets:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(targets.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         elif info_type == "Earnings Estimates":
             # Get earnings estimates
             earnings_est = ticker.earnings_estimate
-            if earnings_est is not None and not earnings_est.empty:
-                return earnings_est
+            if earnings_est is not None:
+                if isinstance(earnings_est, pd.DataFrame) and not earnings_est.empty:
+                    return earnings_est
+                elif isinstance(earnings_est, dict) and earnings_est:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(earnings_est.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         elif info_type == "Revenue Estimates":
             # Get revenue estimates
             revenue_est = ticker.revenue_estimate
-            if revenue_est is not None and not revenue_est.empty:
-                return revenue_est
+            if revenue_est is not None:
+                if isinstance(revenue_est, pd.DataFrame) and not revenue_est.empty:
+                    return revenue_est
+                elif isinstance(revenue_est, dict) and revenue_est:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(revenue_est.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         elif info_type == "Major Holders":
             # Get major shareholders
             major_holders = ticker.major_holders
-            if major_holders is not None and not major_holders.empty:
-                return major_holders
+            if major_holders is not None:
+                if isinstance(major_holders, pd.DataFrame) and not major_holders.empty:
+                    return major_holders
+                elif isinstance(major_holders, dict) and major_holders:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(major_holders.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         elif info_type == "Institutional Holders":
             # Get institutional holders
             institutional_holders = ticker.institutional_holders
-            if institutional_holders is not None and not institutional_holders.empty:
-                return institutional_holders
+            if institutional_holders is not None:
+                if isinstance(institutional_holders, pd.DataFrame) and not institutional_holders.empty:
+                    return institutional_holders
+                elif isinstance(institutional_holders, dict) and institutional_holders:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(institutional_holders.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         elif info_type == "Mutual Fund Holders":
             # Get mutual fund holders
             mutualfund_holders = ticker.mutualfund_holders
-            if mutualfund_holders is not None and not mutualfund_holders.empty:
-                return mutualfund_holders
+            if mutualfund_holders is not None:
+                if isinstance(mutualfund_holders, pd.DataFrame) and not mutualfund_holders.empty:
+                    return mutualfund_holders
+                elif isinstance(mutualfund_holders, dict) and mutualfund_holders:
+                    # Convert dict to DataFrame for consistent handling
+                    return pd.DataFrame(list(mutualfund_holders.items()), columns=['Metric', 'Value']).set_index('Metric')
             return pd.DataFrame()
         
         else:
