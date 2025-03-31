@@ -484,6 +484,17 @@ if stored_data:
 else:
     st.sidebar.write("No data has been stored yet.")
 
+# Export database section
+st.markdown("---")
+st.subheader("Export Database")
+with open("stock_data.db", "rb") as file:
+    btn = st.download_button(
+        label="Download Database File",
+        data=file,
+        file_name="stock_data.db",
+        mime="application/octet-stream"
+    )
+
 # Footer with information
 st.markdown("---")
 st.caption("Data provided by Yahoo Finance via yfinance library. Updated as of request time.")
