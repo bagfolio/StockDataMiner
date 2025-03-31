@@ -49,9 +49,60 @@ class StockDataFetcher:
         
         elif info_type == "Fast Info":
             # Get fast info (quick access to key stats)
-            fast_info = ticker.fast_info
-            if fast_info and isinstance(fast_info, dict) and len(fast_info) > 0:
-                return pd.DataFrame(list(fast_info.items()), columns=['Attribute', 'Value']).set_index('Attribute')
+            try:
+                # Direct access to fast info attributes as a dictionary
+                fast_info_dict = {}
+                
+                # Try to get all fast_info attributes
+                try:
+                    fast_info_dict['dayHigh'] = ticker.fast_info.get('dayHigh', None)
+                    fast_info_dict['dayLow'] = ticker.fast_info.get('dayLow', None)
+                    fast_info_dict['lastPrice'] = ticker.fast_info.get('lastPrice', None)
+                    fast_info_dict['previousClose'] = ticker.fast_info.get('previousClose', None)
+                    fast_info_dict['open'] = ticker.fast_info.get('open', None)
+                    fast_info_dict['volume'] = ticker.fast_info.get('volume', None)
+                    fast_info_dict['marketCap'] = ticker.fast_info.get('marketCap', None)
+                    fast_info_dict['fiftyTwoWeekHigh'] = ticker.fast_info.get('fiftyTwoWeekHigh', None)
+                    fast_info_dict['fiftyTwoWeekLow'] = ticker.fast_info.get('fiftyTwoWeekLow', None)
+                    fast_info_dict['currency'] = ticker.fast_info.get('currency', None)
+                    
+                    # Additional attributes if available
+                    try:
+                        # Additional attributes from 'info' since they might not be in fast_info
+                        info = ticker.info
+                        if info and isinstance(info, dict):
+                            # Add some key financial metrics from info
+                            for key in ['pe_ratio', 'forwardPE', 'dividendYield', 'trailingEps', 'forwardEps', 'beta']:
+                                if key in info:
+                                    fast_info_dict[key] = info[key]
+                    except Exception:
+                        pass
+                except Exception as e:
+                    # If direct attribute access fails, try dict method
+                    try:
+                        fast_info = ticker.fast_info
+                        if isinstance(fast_info, dict):
+                            fast_info_dict = fast_info
+                    except Exception:
+                        # Last resort: extract some basic info from ticker.info
+                        try:
+                            info = ticker.info
+                            if info and isinstance(info, dict):
+                                # Extract key financial metrics that would typically be in fast_info
+                                for key in ['previousClose', 'open', 'dayHigh', 'dayLow', 'volume', 'marketCap']:
+                                    if key in info:
+                                        fast_info_dict[key] = info[key]
+                        except Exception:
+                            pass
+                
+                # Filter out None values
+                fast_info_dict = {k: v for k, v in fast_info_dict.items() if v is not None}
+                
+                if fast_info_dict:
+                    return pd.DataFrame(list(fast_info_dict.items()), columns=['Attribute', 'Value']).set_index('Attribute')
+            except Exception as e:
+                print(f"Error processing fast_info: {str(e)}")
+            
             return pd.DataFrame()
         
         elif info_type == "News":
@@ -119,8 +170,8 @@ class StockDataFetcher:
     def _get_historical_data(self, ticker, info_type):
         """Get historical data for the stock."""
         if info_type == "Price History":
-            # Get price history for the past year
-            history = ticker.history(period="1y")
+            # Get price history for at least 5 years
+            history = ticker.history(period="5y")
             return history
         
         elif info_type == "Dividends":
@@ -313,6 +364,76 @@ class StockDataFetcher:
                 elif isinstance(mutualfund_holders, dict) and mutualfund_holders:
                     # Convert dict to DataFrame for consistent handling
                     return pd.DataFrame(list(mutualfund_holders.items()), columns=['Metric', 'Value']).set_index('Metric')
+            return pd.DataFrame()
+        
+        elif info_type == "Insider Transactions":
+            # Get insider transactions
+            try:
+                insider_transactions = ticker.insider_transactions
+                if insider_transactions is not None:
+                    if isinstance(insider_transactions, pd.DataFrame) and not insider_transactions.empty:
+                        return insider_transactions
+                    elif isinstance(insider_transactions, dict) and insider_transactions:
+                        # Convert dict to DataFrame for consistent handling
+                        return pd.DataFrame(list(insider_transactions.items()), columns=['Metric', 'Value']).set_index('Metric')
+            except Exception as e:
+                print(f"Error retrieving insider transactions: {str(e)}")
+            return pd.DataFrame()
+        
+        elif info_type == "Upgrades Downgrades":
+            # Get upgrades and downgrades
+            try:
+                upgrades_downgrades = ticker.upgrades_downgrades
+                if upgrades_downgrades is not None:
+                    if isinstance(upgrades_downgrades, pd.DataFrame) and not upgrades_downgrades.empty:
+                        return upgrades_downgrades
+                    elif isinstance(upgrades_downgrades, dict) and upgrades_downgrades:
+                        # Convert dict to DataFrame for consistent handling
+                        return pd.DataFrame(list(upgrades_downgrades.items()), columns=['Metric', 'Value']).set_index('Metric')
+            except Exception as e:
+                print(f"Error retrieving upgrades/downgrades: {str(e)}")
+            return pd.DataFrame()
+            
+        elif info_type == "Earnings History":
+            # Get earnings history
+            try:
+                earnings_history = ticker.earnings_history
+                if earnings_history is not None:
+                    if isinstance(earnings_history, pd.DataFrame) and not earnings_history.empty:
+                        return earnings_history
+                    elif isinstance(earnings_history, dict) and earnings_history:
+                        # Convert dict to DataFrame for consistent handling
+                        return pd.DataFrame(list(earnings_history.items()), columns=['Metric', 'Value']).set_index('Metric')
+            except Exception as e:
+                print(f"Error retrieving earnings history: {str(e)}")
+            return pd.DataFrame()
+            
+        elif info_type == "EPS Trend":
+            # Get EPS trend
+            try:
+                eps_trend = ticker.eps_trend
+                if eps_trend is not None:
+                    if isinstance(eps_trend, pd.DataFrame) and not eps_trend.empty:
+                        return eps_trend
+                    elif isinstance(eps_trend, dict) and eps_trend:
+                        # Convert dict to DataFrame for consistent handling
+                        return pd.DataFrame(list(eps_trend.items()), columns=['Metric', 'Value']).set_index('Metric')
+            except Exception as e:
+                print(f"Error retrieving EPS trend: {str(e)}")
+            return pd.DataFrame()
+            
+        elif info_type == "Growth Estimates":
+            # Get growth estimates
+            try:
+                growth_estimates = ticker.growth_estimates
+                if growth_estimates is not None:
+                    if isinstance(growth_estimates, pd.DataFrame) and not growth_estimates.empty:
+                        return growth_estimates
+                    elif isinstance(growth_estimates, dict) and growth_estimates:
+                        # Convert dict to DataFrame for consistent handling
+                        return pd.DataFrame(list(growth_estimates.items()), columns=['Metric', 'Value']).set_index('Metric')
+            except Exception as e:
+                print(f"Error retrieving growth estimates: {str(e)}")
             return pd.DataFrame()
         
         else:
