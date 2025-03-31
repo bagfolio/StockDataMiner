@@ -1,0 +1,148 @@
+Ticker and Tickers
+Ticker
+Tickers
+Stock
+yfinance.Ticker.get_isin
+yfinance.Ticker.isin
+yfinance.Ticker.history
+yfinance.Ticker.get_history_metadata
+yfinance.Ticker.get_dividends
+yfinance.Ticker.dividends
+yfinance.Ticker.get_splits
+yfinance.Ticker.splits
+yfinance.Ticker.get_actions
+yfinance.Ticker.actions
+yfinance.Ticker.get_capital_gains
+yfinance.Ticker.capital_gains
+yfinance.Ticker.get_shares_full
+yfinance.Ticker.get_info
+yfinance.Ticker.info
+yfinance.Ticker.get_fast_info
+yfinance.Ticker.fast_info
+yfinance.Ticker.get_news
+yfinance.Ticker.news
+Market
+Market
+Financials
+yfinance.Ticker.get_income_stmt
+yfinance.Ticker.income_stmt
+yfinance.Ticker.quarterly_income_stmt
+yfinance.Ticker.ttm_income_stmt
+yfinance.Ticker.get_balance_sheet
+yfinance.Ticker.balance_sheet
+yfinance.Ticker.get_cashflow
+yfinance.Ticker.cashflow
+yfinance.Ticker.quarterly_cashflow
+yfinance.Ticker.ttm_cashflow
+yfinance.Ticker.get_earnings
+yfinance.Ticker.earnings
+yfinance.Ticker.calendar
+yfinance.Ticker.get_earnings_dates
+yfinance.Ticker.earnings_dates
+yfinance.Ticker.get_sec_filings
+yfinance.Ticker.sec_filings
+Analysis & Holdings
+yfinance.Ticker.get_recommendations
+yfinance.Ticker.recommendations
+yfinance.Ticker.get_recommendations_summary
+yfinance.Ticker.recommendations_summary
+yfinance.Ticker.get_upgrades_downgrades
+yfinance.Ticker.upgrades_downgrades
+yfinance.Ticker.get_sustainability
+yfinance.Ticker.sustainability
+yfinance.Ticker.get_analyst_price_targets
+yfinance.Ticker.analyst_price_targets
+yfinance.Ticker.get_earnings_estimate
+yfinance.Ticker.earnings_estimate
+yfinance.Ticker.get_revenue_estimate
+yfinance.Ticker.revenue_estimate
+yfinance.Ticker.get_earnings_history
+yfinance.Ticker.earnings_history
+yfinance.Ticker.get_eps_trend
+yfinance.Ticker.eps_trend
+yfinance.Ticker.get_eps_revisions
+yfinance.Ticker.eps_revisions
+yfinance.Ticker.get_growth_estimates
+yfinance.Ticker.growth_estimates
+yfinance.Ticker.get_funds_data
+yfinance.Ticker.funds_data
+yfinance.Ticker.get_insider_purchases
+yfinance.Ticker.insider_purchases
+yfinance.Ticker.get_insider_transactions
+yfinance.Ticker.insider_transactions
+yfinance.Ticker.get_insider_roster_holders
+yfinance.Ticker.insider_roster_holders
+yfinance.Ticker.get_major_holders
+yfinance.Ticker.major_holders
+yfinance.Ticker.get_institutional_holders
+yfinance.Ticker.institutional_holders
+yfinance.Ticker.get_mutualfund_holders
+yfinance.Ticker.mutualfund_holders
+Market
+Market
+Search & News
+Search
+Sector and Industry
+Sector
+Industry
+Screener & Query
+EquityQuery
+FundQuery
+yfinance.screen
+Functions and Utilities
+yfinance.download
+yfinance.enable_debug_mode
+yfinance.set_tz_cache_location
+FundsData class
+FundsData
+PriceHistory class
+API Reference
+API Reference
+Overview
+The yfinance package provides easy access to Yahoo! Finance’s API to retrieve market data. It includes classes and functions for downloading historical market data, accessing ticker information, managing cache, and more.
+
+Public API
+The following are the publicly available classes, and functions exposed by the yfinance package:
+
+Ticker: Class for accessing single ticker data.
+
+Tickers: Class for handling multiple tickers.
+
+Market: Class for accessing market summary.
+
+download: Function to download market data for multiple tickers.
+
+Search: Class for accessing search results.
+
+Sector: Domain class for accessing sector information.
+
+Industry: Domain class for accessing industry information.
+
+Market: Class for accessing market status & summary.
+
+EquityQuery: Class to build equity query filters.
+
+FundQuery: Class to build fund query filters.
+
+screen: Run equity/fund queries.
+
+enable_debug_mode: Function to enable debug mode for logging.
+
+set_tz_cache_location: Function to set the timezone cache location.
+
+previous
+
+Multi-Level Column Index
+
+next
+
+Ticker and Tickers
+
+ On this page
+Overview
+Public API
+ Show Source
+© Copyright 2017-2025 Ran Aroussi.
+
+Created using Sphinx 8.0.2.
+
