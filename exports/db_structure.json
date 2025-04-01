@@ -1,0 +1,158 @@
+{
+  "metadata": [
+    {
+      "name": "key",
+      "type": "TEXT",
+      "notnull": 0,
+      "pk": 1
+    },
+    {
+      "name": "value",
+      "type": "TEXT",
+      "notnull": 1,
+      "pk": 0
+    }
+  ],
+  "tickers": [
+    {
+      "name": "id",
+      "type": "INTEGER",
+      "notnull": 0,
+      "pk": 1
+    },
+    {
+      "name": "symbol",
+      "type": "TEXT",
+      "notnull": 1,
+      "pk": 0
+    },
+    {
+      "name": "name",
+      "type": "TEXT",
+      "notnull": 0,
+      "pk": 0
+    },
+    {
+      "name": "exchange",
+      "type": "TEXT",
+      "notnull": 0,
+      "pk": 0
+    },
+    {
+      "name": "first_fetched",
+      "type": "DATETIME",
+      "notnull": 0,
+      "pk": 0
+    },
+    {
+      "name": "last_fetched",
+      "type": "DATETIME",
+      "notnull": 0,
+      "pk": 0
+    }
+  ],
+  "sqlite_sequence": [
+    {
+      "name": "name",
+      "type": "",
+      "notnull": 0,
+      "pk": 0
+    },
+    {
+      "name": "seq",
+      "type": "",
+      "notnull": 0,
+      "pk": 0
+    }
+  ],
+  "data_categories": [
+    {
+      "name": "id",
+      "type": "INTEGER",
+      "notnull": 0,
+      "pk": 1
+    },
+    {
+      "name": "name",
+      "type": "TEXT",
+      "notnull": 1,
+      "pk": 0
+    }
+  ],
+  "data_types": [
+    {
+      "name": "id",
+      "type": "INTEGER",
+      "notnull": 0,
+      "pk": 1
+    },
+    {
+      "name": "category_id",
+      "type": "INTEGER",
+      "notnull": 1,
+      "pk": 0
+    },
+    {
+      "name": "name",
+      "type": "TEXT",
+      "notnull": 1,
+      "pk": 0
+    }
+  ],
+  "stock_data": [
+    {
+      "name": "id",
+      "type": "INTEGER",
+      "notnull": 0,
+      "pk": 1
+    },
+    {
+      "name": "ticker_id",
+      "type": "INTEGER",
+      "notnull": 1,
+      "pk": 0
+    },
+    {
+      "name": "data_type_id",
+      "type": "INTEGER",
+      "notnull": 1,
+      "pk": 0
+    },
+    {
+      "name": "data",
+      "type": "BLOB",
+      "notnull": 1,
+      "pk": 0
+    },
+    {
+      "name": "fetch_timestamp",
+      "type": "DATETIME",
+      "notnull": 1,
+      "pk": 0
+    },
+    {
+      "name": "data_timestamp",
+      "type": "DATETIME",
+      "notnull": 0,
+      "pk": 0
+    },
+    {
+      "name": "source",
+      "type": "TEXT",
+      "notnull": 0,
+      "pk": 0
+    },
+    {
+      "name": "compressed",
+      "type": "INTEGER",
+      "notnull": 0,
+      "pk": 0
+    },
+    {
+      "name": "is_pickled",
+      "type": "INTEGER",
+      "notnull": 0,
+      "pk": 0
+    }
+  ]
+}

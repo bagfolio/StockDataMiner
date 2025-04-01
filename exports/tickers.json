@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "symbol": "COST",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:57:59",
+    "last_fetched": "2025-04-01 02:58:02"
+  },
+  {
+    "id": 2,
+    "symbol": "WMT",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:58:02",
+    "last_fetched": "2025-04-01 02:58:05"
+  },
+  {
+    "id": 3,
+    "symbol": "TGT",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:58:06",
+    "last_fetched": "2025-04-01 02:58:10"
+  },
+  {
+    "id": 4,
+    "symbol": "KR",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:58:10",
+    "last_fetched": "2025-04-01 02:58:14"
+  },
+  {
+    "id": 5,
+    "symbol": "BBY",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:58:14",
+    "last_fetched": "2025-04-01 02:58:22"
+  },
+  {
+    "id": 6,
+    "symbol": "ACI",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:58:18",
+    "last_fetched": "2025-04-01 02:58:21"
+  },
+  {
+    "id": 7,
+    "symbol": "BJ",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:58:23",
+    "last_fetched": "2025-04-01 02:58:27"
+  },
+  {
+    "id": 8,
+    "symbol": "LOW",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 02:58:27",
+    "last_fetched": "2025-04-01 02:58:30"
+  },
+  {
+    "id": 9,
+    "symbol": "AAPL",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 03:48:38",
+    "last_fetched": "2025-04-01 03:48:38"
+  },
+  {
+    "id": 10,
+    "symbol": "AMZN",
+    "name": "",
+    "exchange": "",
+    "first_fetched": "2025-04-01 03:49:05",
+    "last_fetched": "2025-04-01 03:49:07"
+  }
+]

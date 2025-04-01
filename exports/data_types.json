@@ -1,0 +1,126 @@
+{
+  "1": {
+    "name": "General Information",
+    "types": [
+      {
+        "id": 1,
+        "name": "Basic Info"
+      },
+      {
+        "id": 2,
+        "name": "Fast Info"
+      },
+      {
+        "id": 3,
+        "name": "News"
+      }
+    ]
+  },
+  "2": {
+    "name": "Historical Data",
+    "types": [
+      {
+        "id": 4,
+        "name": "Price History"
+      },
+      {
+        "id": 5,
+        "name": "Dividends"
+      },
+      {
+        "id": 6,
+        "name": "Splits"
+      },
+      {
+        "id": 7,
+        "name": "Actions"
+      },
+      {
+        "id": 8,
+        "name": "Capital Gains"
+      }
+    ]
+  },
+  "3": {
+    "name": "Financial Statements",
+    "types": [
+      {
+        "id": 9,
+        "name": "Income Statement"
+      },
+      {
+        "id": 10,
+        "name": "Balance Sheet"
+      },
+      {
+        "id": 11,
+        "name": "Cash Flow"
+      },
+      {
+        "id": 12,
+        "name": "Earnings"
+      }
+    ]
+  },
+  "4": {
+    "name": "Analysis & Holdings",
+    "types": [
+      {
+        "id": 13,
+        "name": "Recommendations"
+      },
+      {
+        "id": 14,
+        "name": "Sustainability"
+      },
+      {
+        "id": 15,
+        "name": "Analyst Price Targets"
+      },
+      {
+        "id": 16,
+        "name": "Earnings Estimates"
+      },
+      {
+        "id": 17,
+        "name": "Revenue Estimates"
+      },
+      {
+        "id": 18,
+        "name": "Major Holders"
+      },
+      {
+        "id": 19,
+        "name": "Institutional Holders"
+      },
+      {
+        "id": 20,
+        "name": "Mutual Fund Holders"
+      },
+      {
+        "id": 21,
+        "name": "Earnings History"
+      },
+      {
+        "id": 22,
+        "name": "EPS Trend"
+      },
+      {
+        "id": 23,
+        "name": "Growth Estimates"
+      },
+      {
+        "id": 24,
+        "name": "Insider Transactions"
+      },
+      {
+        "id": 25,
+        "name": "Upgrades/Downgrades"
+      },
+      {
+        "id": 26,
+        "name": "Upgrades Downgrades"
+      }
+    ]
+  }
+}
