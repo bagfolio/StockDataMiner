@@ -85,9 +85,50 @@ Enter a ticker symbol and select the information you want to view.
 # Main user input area
 st.sidebar.header("Input Parameters")
 
-# Input for ticker symbol(s)
-ticker_input = st.sidebar.text_input("Enter ticker symbol(s) (comma-separated for multiple)", "AAPL")
-ticker_symbols = [symbol.strip().upper() for symbol in ticker_input.split(",")]
+# Input for ticker symbol(s) - with two options
+st.sidebar.subheader("Enter Stock Symbols")
+input_method = st.sidebar.radio(
+    "Choose input method:",
+    ["Single input field (comma-separated)", "Multiple individual inputs"],
+    key="input_method"
+)
+
+if input_method == "Single input field (comma-separated)":
+    # Original comma-separated input
+    ticker_input = st.sidebar.text_input("Enter ticker symbol(s) (comma-separated for multiple)", "AAPL")
+    ticker_symbols = [symbol.strip().upper() for symbol in ticker_input.split(",") if symbol.strip()]
+else:
+    # Individual input fields
+    st.sidebar.markdown("Enter up to 10 ticker symbols individually:")
+    # Initialize session state for tickers if not already there
+    if 'individual_tickers' not in st.session_state:
+        st.session_state.individual_tickers = [""] * 10
+    
+    # Create 10 input fields
+    updated_tickers = []
+    for i in range(10):
+        ticker = st.sidebar.text_input(
+            f"Symbol #{i+1}", 
+            value=st.session_state.individual_tickers[i],
+            key=f"ticker_{i}"
+        )
+        # Only add non-empty tickers
+        if ticker.strip():
+            updated_tickers.append(ticker.strip().upper())
+    
+    # Update session state
+    st.session_state.individual_tickers = [
+        st.session_state[f"ticker_{i}"] for i in range(10)
+    ]
+    
+    # Set ticker symbols from individual inputs
+    ticker_symbols = updated_tickers
+
+# Display the current ticker symbols being used
+if ticker_symbols:
+    st.sidebar.info(f"Processing symbols: {', '.join(ticker_symbols)}")
+else:
+    st.sidebar.warning("Please enter at least one ticker symbol")
 
 # Organize categories and data types for internal use and comprehensive data fetching
 categories = {
@@ -564,13 +605,21 @@ if 'comprehensive_fetch_button' in locals() and comprehensive_fetch_button:
         
         all_batch_results = {}
         
+        # For storing status messages
+        if 'status_messages' not in st.session_state:
+            st.session_state.status_messages = []
+            
         # Function to update status text
         def update_status(message):
-            # Prepend the new message to the existing text area
+            # Add to the beginning of the list (newest first)
+            st.session_state.status_messages.insert(0, message)
+            # Join all messages with newlines and display
+            status_text = "\n".join(st.session_state.status_messages)
             status_area.text_area(
                 "Processing Status (newest at top):",
-                message + "\n" + status_area.text_area("", value="", disabled=True),
-                height=150
+                status_text,
+                height=200,
+                key="status_updates"
             )
         
         # Process each batch
