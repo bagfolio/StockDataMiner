@@ -50,7 +50,20 @@ st.set_page_config(page_title="Stock Data Scraper", layout="wide")
 
 # Initialize database
 db_manager = DatabaseManager("stock_data.db")
-db_manager.initialize_database()
+try:
+    db_manager.clear_database()  # Start fresh
+    db_manager.initialize_database()
+except Exception as e:
+    st.error(f"Database initialization error: {e}")
+    st.info("Attempting to reinitialize database...")
+    try:
+        # Remove existing database file
+        import os
+        if os.path.exists("stock_data.db"):
+            os.remove("stock_data.db")
+        db_manager.initialize_database()
+    except Exception as e:
+        st.error(f"Failed to reinitialize database: {e}")
 
 # Initialize the stock data fetcher with database manager
 data_fetcher = StockDataFetcher(db_manager=db_manager)
