@@ -7,8 +7,23 @@ import os
 import time
 import numpy as np
 import datetime
+import json
 from database import DatabaseManager
 from stock_data import StockDataFetcher
+
+# Import MongoDB manager with a fallback mechanism
+try:
+    from mongodb_manager import MongoDBManager, HAS_PYMONGO, ObjectId
+except ImportError:
+    HAS_PYMONGO = False
+    
+    # Fallback ObjectId implementation
+    class ObjectId:
+        def __init__(self, id_str=None):
+            self.id_str = id_str if id_str else str(datetime.datetime.now().timestamp())
+            
+        def __str__(self):
+            return self.id_str
 
 # Helper function to format numbers for better readability
 def format_number(val):
@@ -48,22 +63,139 @@ def format_number(val):
 # Set page title and layout
 st.set_page_config(page_title="Stock Data Scraper", layout="wide")
 
-# Initialize database
-db_manager = DatabaseManager("stock_data.db")
-try:
-    db_manager.clear_database()  # Start fresh
-    db_manager.initialize_database()
-except Exception as e:
-    st.error(f"Database initialization error: {e}")
-    st.info("Attempting to reinitialize database...")
+# Initialize session state for database settings if not already present
+if 'db_type' not in st.session_state:
+    st.session_state.db_type = "SQLite (Local)"
+if 'mongodb_uri' not in st.session_state:
+    st.session_state.mongodb_uri = os.environ.get('MONGODB_URI', '')
+if 'db_initialized' not in st.session_state:
+    st.session_state.db_initialized = False
+if 'db_manager' not in st.session_state:
+    st.session_state.db_manager = None
+    
+# Database selection - check pymongo availability first
+if 'pymongo_check_done' not in st.session_state:
     try:
-        # Remove existing database file
-        import os
-        if os.path.exists("stock_data.db"):
-            os.remove("stock_data.db")
-        db_manager.initialize_database()
-    except Exception as e:
-        st.error(f"Failed to reinitialize database: {e}")
+        # Try to import these to see if pymongo is working
+        import pymongo
+        from bson.objectid import ObjectId
+        st.session_state.pymongo_available = True
+    except ImportError:
+        st.session_state.pymongo_available = False
+    st.session_state.pymongo_check_done = True
+
+# Show MongoDB as an option only if available
+if st.session_state.pymongo_available:
+    db_options = ["SQLite (Local)", "MongoDB (Cloud)"]
+    db_help = "Select which database to use for storage"
+else:
+    db_options = ["SQLite (Local)", "MongoDB (Cloud) - Not Available"]
+    db_help = "MongoDB requires the pymongo package to be properly installed"
+    # Force SQLite if MongoDB not available
+    if st.session_state.db_type == "MongoDB (Cloud)":
+        st.session_state.db_type = "SQLite (Local)"
+
+# Display the database selection
+db_type = st.sidebar.radio(
+    "Database Type", 
+    db_options,
+    index=0 if st.session_state.db_type == "SQLite (Local)" else 1,
+    help=db_help,
+    key="db_type_radio"
+)
+
+# Disable MongoDB option if not available
+if not st.session_state.pymongo_available and db_type == "MongoDB (Cloud) - Not Available":
+    st.sidebar.error("MongoDB is not available. Please install PyMongo properly.")
+    db_type = "SQLite (Local)"
+    st.session_state.db_type = "SQLite (Local)"
+
+# Update session state if selection changed
+if db_type != st.session_state.db_type:
+    st.session_state.db_type = db_type
+    st.session_state.db_initialized = False  # Force re-initialization
+
+# Initialize database based on selection
+if db_type == "MongoDB (Cloud)":
+    # Get MongoDB connection string from environment variable or user input
+    mongodb_uri = st.sidebar.text_input(
+        "MongoDB Connection String", 
+        value=st.session_state.mongodb_uri,
+        type="password", 
+        help="Enter your MongoDB connection string (Atlas or local)",
+        key="mongodb_uri_input"
+    )
+    
+    # Update session state if connection string changed
+    if mongodb_uri != st.session_state.mongodb_uri:
+        st.session_state.mongodb_uri = mongodb_uri
+        st.session_state.db_initialized = False  # Force re-initialization
+    
+    # Initialize MongoDB connection if needed
+    if not st.session_state.db_initialized and mongodb_uri:
+        try:
+            # Store in environment variable for future use
+            os.environ['MONGODB_URI'] = mongodb_uri
+            
+            # Use MongoDB Manager
+            st.session_state.db_manager = MongoDBManager(mongodb_uri)
+            st.sidebar.success("Connected to MongoDB successfully!")
+            st.session_state.db_initialized = True
+        except Exception as e:
+            st.sidebar.error(f"MongoDB connection error: {e}")
+            # Fallback to SQLite
+            st.sidebar.warning("Falling back to SQLite database...")
+            try:
+                st.session_state.db_manager = DatabaseManager("stock_data.db")
+                st.session_state.db_manager.initialize_database()
+                st.session_state.db_initialized = True
+            except Exception as e:
+                st.sidebar.error(f"Failed to initialize SQLite database: {e}")
+    elif not mongodb_uri:
+        # No MongoDB URI provided, use SQLite
+        if not st.session_state.db_initialized:
+            st.sidebar.warning("No MongoDB connection string provided, using SQLite database...")
+            try:
+                st.session_state.db_manager = DatabaseManager("stock_data.db")
+                st.session_state.db_manager.initialize_database()
+                st.session_state.db_initialized = True
+            except Exception as e:
+                st.sidebar.error(f"Failed to initialize SQLite database: {e}")
+else:
+    # Use SQLite database if not already initialized
+    if not st.session_state.db_initialized:
+        try:
+            # Initialize database
+            st.session_state.db_manager = DatabaseManager("stock_data.db")
+            st.session_state.db_manager.initialize_database()
+            st.session_state.db_initialized = True
+        except Exception as e:
+            st.sidebar.error(f"Database initialization error: {e}")
+            st.sidebar.info("Attempting to reinitialize database...")
+            try:
+                # Remove existing database file
+                if os.path.exists("stock_data.db"):
+                    os.remove("stock_data.db")
+                st.session_state.db_manager = DatabaseManager("stock_data.db")
+                st.session_state.db_manager.initialize_database()
+                st.session_state.db_initialized = True
+            except Exception as e:
+                st.sidebar.error(f"Failed to reinitialize database: {e}")
+
+# Use the database manager from session state
+db_manager = st.session_state.db_manager
+
+# Add a documentation link
+if db_type == "MongoDB (Cloud)":
+    st.sidebar.markdown("""
+    📚 [MongoDB Setup Guide](https://github.com/user/stock-data-scraper/blob/main/MONGODB_SETUP.md)
+    """)
+
+# A button to view the MongoDB setup guide
+if db_type == "MongoDB (Cloud)" and st.sidebar.button("View MongoDB Setup Guide"):
+    with open("MONGODB_SETUP.md", "r") as f:
+        mongodb_guide = f.read()
+    st.markdown(mongodb_guide)
 
 # Initialize the stock data fetcher with database manager
 data_fetcher = StockDataFetcher(db_manager=db_manager)

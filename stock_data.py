@@ -4,8 +4,64 @@ import datetime
 import time
 import numpy as np
 import threading
-import requests_cache
+import json
+import os
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Define our own simple caching mechanism instead of using requests_cache
+class SimpleCache:
+    def __init__(self, cache_file='yfinance_simple_cache.db', expire_after=900):
+        self.cache_file = cache_file
+        self.expire_after = expire_after
+        self._init_db()
+    
+    def _init_db(self):
+        """Initialize the SQLite database for caching"""
+        conn = sqlite3.connect(self.cache_file)
+        cursor = conn.cursor()
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cache (
+            key TEXT PRIMARY KEY,
+            data TEXT,
+            timestamp INTEGER
+        )
+        ''')
+        conn.commit()
+        conn.close()
+    
+    def get(self, key):
+        """Get data from cache if it exists and is not expired"""
+        conn = sqlite3.connect(self.cache_file)
+        cursor = conn.cursor()
+        cursor.execute('SELECT data, timestamp FROM cache WHERE key = ?', (key,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            data, timestamp = result
+            # Check if expired
+            if time.time() - timestamp <= self.expire_after:
+                try:
+                    return json.loads(data)
+                except:
+                    return None
+        return None
+    
+    def set(self, key, data):
+        """Store data in cache"""
+        try:
+            json_data = json.dumps(data)
+            conn = sqlite3.connect(self.cache_file)
+            cursor = conn.cursor()
+            cursor.execute('INSERT OR REPLACE INTO cache VALUES (?, ?, ?)', 
+                          (key, json_data, int(time.time())))
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error storing in cache: {e}")
+            return False
 
 class StockDataFetcher:
     def __init__(self, db_manager=None):
@@ -15,19 +71,11 @@ class StockDataFetcher:
         Parameters:
         db_manager (DatabaseManager, optional): Database manager for checking existing data
         """
-        # Create a cached session that will be reused across requests
-        # This dramatically improves performance by avoiding redundant API calls
-        # Cache expires after 15 minutes (900 seconds) for somewhat fresh data
-        self.session = requests_cache.CachedSession(
-            cache_name='yfinance_cache',
-            backend='sqlite',
-            expire_after=900
-        )
+        # Initialize our simple cache system
+        self.cache = SimpleCache(cache_file='yfinance_simple_cache.db', expire_after=900)
         
-        # Set up headers to mimic a browser request to avoid rate limiting
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-        })
+        # Instead of requests_cache, we'll use our simple cache and a regular session
+        self.session = None  # Will be created when needed
         
         # Store reference to database manager if provided
         self.db_manager = db_manager
@@ -160,8 +208,9 @@ class StockDataFetcher:
             # Add fetch timestamp to track when data was retrieved
             fetch_timestamp = pd.Timestamp.now()
             
-            # Create a Ticker object for the given symbol with our cached session
-            ticker = yf.Ticker(ticker_symbol, session=self.session)
+            # Create a Ticker object for the given symbol
+            # We're not using session parameter as we replaced requests_cache with our own caching
+            ticker = yf.Ticker(ticker_symbol)
             
             # Fetch data based on category and info type
             data = None
@@ -356,8 +405,7 @@ class StockDataFetcher:
                     group_by='ticker',
                     auto_adjust=True,
                     repair=True,  # Repair common data issues
-                    threads=True,  # Use multithreading
-                    session=self.session  # Use our cached session
+                    threads=True  # Use multithreading
                 )
                 
                 fetch_timestamp = pd.Timestamp.now().isoformat()
