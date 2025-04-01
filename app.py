@@ -52,8 +52,8 @@ st.set_page_config(page_title="Stock Data Scraper", layout="wide")
 db_manager = DatabaseManager("stock_data.db")
 db_manager.initialize_database()
 
-# Initialize the stock data fetcher
-data_fetcher = StockDataFetcher()
+# Initialize the stock data fetcher with database manager
+data_fetcher = StockDataFetcher(db_manager=db_manager)
 
 # Define variables to avoid potential reference errors
 quick_fetch_button = False
@@ -140,8 +140,31 @@ with tabs[2]:
     st.write("Fetch and download all available data for the specified ticker(s).")
     st.write("This option will fetch ALL available data categories and create a consolidated export file for each ticker.")
     
+    # Options for batch processing
+    st.subheader("Batch Processing Options")
+    
+    # Option to force refresh cached data
+    force_refresh = st.checkbox("Force refresh cached data", value=False, 
+                               help="When checked, will fetch fresh data even if recent data exists")
+    
+    # Option to process in parallel
+    parallel_processing = st.checkbox("Use parallel processing (faster but more API calls)", value=True,
+                                    help="When checked, will process multiple stocks in parallel")
+    
+    # Progress tracking
+    progress_placeholder = st.empty()
+    
+    # Add status display area
+    status_area = st.empty()
+    
     # Warning about time
-    st.warning("This process may take several minutes for each ticker, especially for companies with extensive data.")
+    st.warning("This process may take several minutes, especially for multiple tickers or companies with extensive data.")
+    
+    # Specify max number of stocks to process at once
+    max_tickers_col, _ = st.columns([1, 3])
+    with max_tickers_col:
+        max_batch_tickers = st.number_input("Max tickers per batch", min_value=1, max_value=20, value=5,
+                                         help="Maximum number of tickers to process in a single batch")
     
     # Button to start comprehensive data collection
     comprehensive_fetch_button = st.button("Fetch All Data", key="comprehensive_fetch")
@@ -471,29 +494,137 @@ if 'custom_fetch_button' in locals() and custom_fetch_button:
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
 
+# Create a new function for batch processing 
+def batch_process_tickers(ticker_symbols, force_refresh=False, callback=None):
+    """
+    Process multiple tickers in batch with progress tracking
+    
+    Parameters:
+    ticker_symbols (list): List of ticker symbols to process
+    force_refresh (bool): Whether to force refresh data
+    callback (function): Optional callback for progress updates
+    
+    Returns:
+    dict: Dictionary mapping tickers to their data
+    """
+    all_tickers_data = {}
+    
+    # Define a progress callback
+    def progress_callback(ticker, category, info_type, success, from_cache=False, error=None):
+        if not success:
+            status_msg = f"❌ Error with {ticker} - {category} - {info_type}: {error}"
+        elif from_cache:
+            status_msg = f"📚 Using cached data for {ticker} - {category} - {info_type}"
+        else:
+            status_msg = f"✅ Fetched {ticker} - {category} - {info_type}"
+            
+        if callback:
+            callback(status_msg)
+    
+    # Process each ticker using the batch processing capability
+    results = data_fetcher.batch_process_tickers(
+        ticker_symbols,
+        callback=progress_callback,
+        force_refresh=force_refresh
+    )
+    
+    return results
+
 # Process Comprehensive Export Tab
 if 'comprehensive_fetch_button' in locals() and comprehensive_fetch_button:
-    # Container for comprehensive export results
-    with st.container():
-        # Create tabs for each ticker
-        if len(ticker_symbols) > 0:
-            export_tabs = st.tabs(ticker_symbols)
+    # Make sure there are ticker symbols to process
+    if len(ticker_symbols) > 0:
+        # Initialize status display
+        status_container = st.empty()
+        progress_container = st.empty()
+        batch_results_container = st.empty()
+        
+        # Split tickers into batches for processing
+        all_tickers = ticker_symbols.copy()
+        
+        # Process in batches to avoid overwhelming the API
+        total_tickers = len(all_tickers)
+        batch_count = (total_tickers + max_batch_tickers - 1) // max_batch_tickers  # Ceiling division
+        
+        # Initialize progress
+        progress_bar = progress_container.progress(0)
+        
+        all_batch_results = {}
+        
+        # Function to update status text
+        def update_status(message):
+            # Prepend the new message to the existing text area
+            status_area.text_area(
+                "Processing Status (newest at top):",
+                message + "\n" + status_area.text_area("", value="", disabled=True),
+                height=150
+            )
+        
+        # Process each batch
+        for i in range(batch_count):
+            batch_start = i * max_batch_tickers
+            batch_end = min(batch_start + max_batch_tickers, total_tickers)
+            current_batch = all_tickers[batch_start:batch_end]
             
-            for i, symbol in enumerate(ticker_symbols):
+            batch_results_container.info(f"Processing batch {i+1}/{batch_count}: {', '.join(current_batch)}")
+            
+            # Process the batch
+            with st.spinner(f"Processing batch {i+1}/{batch_count}..."):
+                batch_results = batch_process_tickers(
+                    current_batch,
+                    force_refresh=force_refresh,
+                    callback=update_status
+                )
+                
+                # Store results
+                all_batch_results.update(batch_results)
+            
+            # Update progress
+            progress_bar.progress((i + 1) / batch_count)
+            
+            # Show interim results if there are more batches to process
+            if i < batch_count - 1:
+                batch_results_container.success(f"Completed batch {i+1}/{batch_count}. Processed {len(batch_results)} tickers.")
+        
+        # Clear the progress bar and show completion message
+        progress_container.empty()
+        batch_results_container.success(f"✅ Completed processing {len(all_batch_results)} tickers!")
+        
+        # Process the collected results for display and export
+        if all_batch_results:
+            # Create tabs for each ticker
+            export_tabs = st.tabs(list(all_batch_results.keys()))
+            
+            for i, (ticker, ticker_data) in enumerate(all_batch_results.items()):
                 with export_tabs[i]:
-                    st.subheader(f"Comprehensive Data for {symbol}")
+                    st.subheader(f"Comprehensive Data for {ticker}")
                     
-                    # Fetch all available data for this ticker
-                    with st.spinner(f"Fetching all available data for {symbol}. This may take several minutes..."):
-                        all_category_data = fetch_all_data(symbol)
-                    
-                    if all_category_data:
-                        # Create exportable data for each category
-                        for category, info_data in all_category_data.items():
+                    if ticker_data:
+                        # Create expandable sections for each category
+                        for category, info_data in ticker_data.items():
                             # Create an expander for each category
                             with st.expander(f"{category} Data", expanded=False):
                                 for info_type, data in info_data.items():
                                     st.subheader(info_type)
+                                    
+                                    # Display metadata (timestamp and source information)
+                                    metadata_cols = st.columns(2)
+                                    
+                                    with metadata_cols[0]:
+                                        # Show fetch timestamp
+                                        fetch_time = data.attrs.get('fetch_timestamp', 'Unknown') if hasattr(data, 'attrs') else 'Unknown'
+                                        st.info(f"**Data Fetched:** {fetch_time}")
+                                        
+                                        # Show data timestamp if available
+                                        data_time = data.attrs.get('data_timestamp', '') if hasattr(data, 'attrs') else ''
+                                        if data_time:
+                                            st.info(f"**Data Reported/Created:** {data_time}")
+                                    
+                                    with metadata_cols[1]:
+                                        # Show source information if available
+                                        source = data.attrs.get('source', '') if hasattr(data, 'attrs') else ''
+                                        if source:
+                                            st.info(f"**Data Source/Provider:** {source}")
                                     
                                     # Format numeric columns for better readability
                                     formatted_data = data.copy()
@@ -503,34 +634,41 @@ if 'comprehensive_fetch_button' in locals() and comprehensive_fetch_button:
                                     # Display a preview of the data
                                     st.dataframe(formatted_data)
                                     
+                                    # Create visualization if possible
+                                    create_visualization(data, ticker, category, info_type)
+                                    
                                     # Individual export options
                                     csv = data.to_csv()
-                                    export_name = f"{symbol}_{info_type.replace(' ', '_')}.csv"
+                                    export_name = f"{ticker}_{info_type.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
                                     st.download_button(
                                         label=f"Download {info_type} as CSV",
                                         data=csv,
                                         file_name=export_name,
                                         mime="text/csv",
-                                        key=f"{symbol}_{category}_{info_type}"  # Unique key for each button
+                                        key=f"{ticker}_{category}_{info_type}"  # Unique key for each button
                                     )
                         
                         # Create consolidated export file for all data
                         st.subheader("Consolidated Export")
                         st.write("Download all data in a single consolidated file.")
                         
-                        # Prepare Excel writer
-                        import io
-                        buffer = io.BytesIO()
-                        
                         # Create a consolidated CSV for all data
                         consolidated_data = []
-                        for category, info_data in all_category_data.items():
+                        for category, info_data in ticker_data.items():
                             for info_type, data in info_data.items():
                                 # Add metadata columns to identify the data
                                 if not data.empty:
-                                    data_copy = data.copy()
-                                    data_copy['__category'] = category
-                                    data_copy['__info_type'] = info_type
+                                    data_copy = data.copy().reset_index()
+                                    data_copy['Category'] = category
+                                    data_copy['InfoType'] = info_type
+                                    data_copy['Ticker'] = ticker
+                                    
+                                    # Add metadata if available
+                                    if hasattr(data, 'attrs'):
+                                        data_copy['FetchTimestamp'] = data.attrs.get('fetch_timestamp', '')
+                                        data_copy['DataTimestamp'] = data.attrs.get('data_timestamp', '')
+                                        data_copy['Source'] = data.attrs.get('source', '')
+                                        
                                     consolidated_data.append(data_copy)
                         
                         if consolidated_data:
@@ -538,20 +676,87 @@ if 'comprehensive_fetch_button' in locals() and comprehensive_fetch_button:
                             all_data_df = pd.concat(consolidated_data, ignore_index=True)
                             
                             # Export as CSV
-                            csv = all_data_df.to_csv()
-                            export_name = f"{symbol}_all_data.csv"
+                            csv = all_data_df.to_csv(index=False)
+                            export_name = f"{ticker}_Complete_Dataset_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
                             st.download_button(
                                 label="Download All Data as CSV",
                                 data=csv,
                                 file_name=export_name,
                                 mime="text/csv"
                             )
+                            
+                            # Show summary stats
+                            st.info(f"""
+                            **Data Summary for {ticker}:**
+                            - Categories: {len(ticker_data)}
+                            - Data Types: {sum(len(info_types) for info_types in ticker_data.values())}
+                            - Total Data Points: {sum(len(df) for df in consolidated_data)}
+                            """)
                         else:
                             st.warning("No data available for consolidated export.")
                     else:
-                        st.warning(f"No data was successfully retrieved for {symbol}")
+                        st.warning(f"No data was successfully retrieved for {ticker}")
+            
+            # Multi-ticker export option
+            st.subheader("Multi-ticker Export Options")
+            
+            # List of tickers to include in export (default all)
+            tickers_to_export = st.multiselect(
+                "Select tickers to include in the multi-ticker export",
+                list(all_batch_results.keys()),
+                default=list(all_batch_results.keys())
+            )
+            
+            if tickers_to_export and st.button("Create Multi-ticker Export"):
+                # Collect all data for selected tickers
+                with st.spinner("Preparing multi-ticker export..."):
+                    multi_ticker_dfs = []
+                    
+                    # Process each selected ticker
+                    for ticker in tickers_to_export:
+                        ticker_data = all_batch_results.get(ticker, {})
+                        for category, info_types in ticker_data.items():
+                            for info_type, data in info_types.items():
+                                if isinstance(data, pd.DataFrame) and not data.empty:
+                                    # Add identifying columns
+                                    export_df = data.copy().reset_index()
+                                    export_df['Ticker'] = ticker
+                                    export_df['Category'] = category
+                                    export_df['InfoType'] = info_type
+                                    
+                                    # Add metadata
+                                    if hasattr(data, 'attrs'):
+                                        export_df['FetchTimestamp'] = data.attrs.get('fetch_timestamp', '')
+                                        export_df['DataTimestamp'] = data.attrs.get('data_timestamp', '')
+                                        export_df['Source'] = data.attrs.get('source', '')
+                                    
+                                    multi_ticker_dfs.append(export_df)
+                    
+                    if multi_ticker_dfs:
+                        # Combine all data
+                        all_tickers_csv = pd.concat(multi_ticker_dfs, axis=0)
+                        
+                        # Create a file name with all tickers (shortened if there are too many)
+                        if len(tickers_to_export) <= 5:
+                            file_name_prefix = f"{'_'.join(tickers_to_export)}"
+                        else:
+                            file_name_prefix = f"{tickers_to_export[0]}_and_{len(tickers_to_export)-1}_others"
+                        
+                        # Offer download
+                        st.download_button(
+                            label=f"Download Combined Data for {len(tickers_to_export)} Tickers",
+                            data=all_tickers_csv.to_csv(index=False),
+                            file_name=f"{file_name_prefix}_Combined_Dataset_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                        
+                        st.success(f"Multi-ticker export prepared with {len(all_tickers_csv)} rows of data across {len(tickers_to_export)} tickers.")
+                    else:
+                        st.warning("No data available for the selected tickers.")
         else:
-            st.warning("Please enter at least one ticker symbol to fetch data.")
+            st.warning("No data was retrieved for any of the tickers.")
+    else:
+        st.warning("Please enter at least one ticker symbol to fetch data.")
 
 # Display stored data section
 st.sidebar.header("Stored Data")

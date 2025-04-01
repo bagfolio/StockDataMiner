@@ -405,11 +405,17 @@ class DatabaseManager:
             
             # Delete all data in proper order (respecting foreign keys)
             self.cursor.execute("DELETE FROM stock_data")
+            self.cursor.execute("DELETE FROM tickers")
             
-            # Optionally reset auto-increment counters
+            # Reset auto-increment counters
             self.cursor.execute("DELETE FROM sqlite_sequence WHERE name='stock_data'")
+            self.cursor.execute("DELETE FROM sqlite_sequence WHERE name='tickers'") 
             
             conn.commit()
+            
+            # Reinitialize the database schema if needed
+            self.initialize_database()
+            
             return True
         except Exception as e:
             print(f"Error clearing database: {e}")

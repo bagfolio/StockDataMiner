@@ -8,8 +8,13 @@ import requests_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class StockDataFetcher:
-    def __init__(self):
-        """Initialize the stock data fetcher with caching."""
+    def __init__(self, db_manager=None):
+        """
+        Initialize the stock data fetcher with caching.
+        
+        Parameters:
+        db_manager (DatabaseManager, optional): Database manager for checking existing data
+        """
         # Create a cached session that will be reused across requests
         # This dramatically improves performance by avoiding redundant API calls
         # Cache expires after 15 minutes (900 seconds) for somewhat fresh data
@@ -23,19 +28,105 @@ class StockDataFetcher:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
         })
+        
+        # Store reference to database manager if provided
+        self.db_manager = db_manager
+        
+        # Track which data we've already fetched to avoid duplicates in a session
+        self._fetched_data_cache = set()
 
-    def get_data(self, ticker_symbol, category, info_type):
+    def data_exists(self, ticker_symbol, category, info_type, max_age_hours=24):
         """
-        Fetch stock data based on category and info type
+        Check if data already exists in the database and is not too old
         
         Parameters:
         ticker_symbol (str): The stock ticker symbol
         category (str): The category of information to fetch
         info_type (str): The specific type of information within the category
+        max_age_hours (int): Maximum age in hours to consider data fresh
+        
+        Returns:
+        bool: True if fresh data exists, False otherwise
+        """
+        # Check internal cache first for this session
+        cache_key = f"{ticker_symbol}_{category}_{info_type}"
+        if cache_key in self._fetched_data_cache:
+            return True
+        
+        # If no database manager, assume data doesn't exist
+        if self.db_manager is None:
+            return False
+            
+        try:
+            # Use database manager to check for existing data
+            conn = self.db_manager.connect()
+            cursor = conn.cursor()
+            
+            # Query to check if data exists and is fresh
+            cursor.execute('''
+            SELECT s.fetch_timestamp
+            FROM stock_data s
+            JOIN tickers t ON s.ticker_id = t.id
+            JOIN data_types dt ON s.data_type_id = dt.id
+            JOIN data_categories dc ON dt.category_id = dc.id
+            WHERE t.symbol = ? AND dc.name = ? AND dt.name = ?
+            ''', (ticker_symbol, category, info_type))
+            
+            result = cursor.fetchone()
+            
+            # Close connection
+            conn.close()
+            
+            if result:
+                fetch_timestamp = result[0]
+                try:
+                    # Convert to datetime for age check
+                    fetch_time = pd.to_datetime(fetch_timestamp)
+                    now = pd.Timestamp.now()
+                    age_hours = (now - fetch_time).total_seconds() / 3600
+                    
+                    # If fresh enough, data exists
+                    return age_hours <= max_age_hours
+                except:
+                    # If can't parse timestamp, assume data exists but is old
+                    return False
+            else:
+                # No data found
+                return False
+                
+        except Exception as e:
+            # On error, assume data doesn't exist
+            print(f"Error checking if data exists: {e}")
+            return False
+    
+    def get_data(self, ticker_symbol, category, info_type, force_refresh=False):
+        """
+        Fetch stock data based on category and info type,
+        with option to use existing data from database
+        
+        Parameters:
+        ticker_symbol (str): The stock ticker symbol
+        category (str): The category of information to fetch
+        info_type (str): The specific type of information within the category
+        force_refresh (bool): Force refresh even if recent data exists
         
         Returns:
         DataFrame: The requested stock data with timestamp and source metadata
         """
+        # Check if we can use existing data
+        cache_key = f"{ticker_symbol}_{category}_{info_type}"
+        
+        if not force_refresh:
+            # Check if data already exists
+            # For 'News', always get fresh data
+            if info_type != "News" and self.data_exists(ticker_symbol, category, info_type):
+                # Get existing data from database
+                if self.db_manager:
+                    existing_data = self.db_manager.get_stored_data(ticker_symbol, category, info_type)
+                    if existing_data is not None and not existing_data.empty:
+                        # Add to cache so we know we have it
+                        self._fetched_data_cache.add(cache_key)
+                        return existing_data
         try:
             # Add fetch timestamp to track when data was retrieved
             fetch_timestamp = pd.Timestamp.now()
@@ -546,6 +637,90 @@ class StockDataFetcher:
         
         else:
             raise ValueError(f"Unknown financial statement type: {info_type}")
+
+    def batch_process_tickers(self, ticker_symbols, callback=None, force_refresh=False):
+        """
+        Process multiple tickers and get all available data for them in parallel.
+        
+        Parameters:
+        ticker_symbols (list): List of ticker symbols to process
+        callback (function): Callback function to report progress, takes ticker, category, info_type, success
+        force_refresh (bool): Force refresh data even if recent data exists
+        
+        Returns:
+        dict: Nested dictionary mapping tickers -> categories -> info_types -> data
+        """
+        results = {}
+        
+        # Categories and info types to process for each ticker
+        categories_to_process = {
+            "General Information": ["Basic Info", "Fast Info", "News"],
+            "Historical Data": ["Price History", "Dividends", "Splits", "Actions"],
+            "Financial Statements": ["Income Statement", "Balance Sheet", "Cash Flow", "Earnings"],
+            "Analysis & Holdings": [
+                "Recommendations", "Analyst Price Targets", "Upgrades Downgrades",
+                "Earnings Estimates", "Revenue Estimates", "EPS Trend", "Growth Estimates",
+                "Major Holders", "Institutional Holders", "Mutual Fund Holders",
+                "Insider Transactions"
+            ]
+        }
+        
+        # Process each ticker
+        for ticker in ticker_symbols:
+            ticker_data = {}
+            
+            # Process each category
+            for category, info_types in categories_to_process.items():
+                category_data = {}
+                
+                # Process each info type for this category
+                for info_type in info_types:
+                    try:
+                        # Check if we have this data already
+                        if not force_refresh and self.data_exists(ticker, category, info_type):
+                            # Get from database
+                            if self.db_manager:
+                                data = self.db_manager.get_stored_data(ticker, category, info_type)
+                                if data is not None and not data.empty:
+                                    category_data[info_type] = data
+                                    if callback:
+                                        callback(ticker, category, info_type, True, from_cache=True)
+                                    continue
+                        
+                        # Fetch new data
+                        data = self.get_data(ticker, category, info_type, force_refresh=force_refresh)
+                        
+                        if data is not None and not data.empty:
+                            category_data[info_type] = data
+                            
+                            # Store in database if provided
+                            if self.db_manager:
+                                source = data.attrs.get('source', 'Yahoo Finance') if hasattr(data, 'attrs') else None
+                                data_timestamp = data.attrs.get('data_timestamp') if hasattr(data, 'attrs') else None
+                                self.db_manager.store_data(ticker, category, info_type, data, 
+                                                          data_timestamp=data_timestamp, source=source)
+                            
+                            # Add to fetched cache
+                            cache_key = f"{ticker}_{category}_{info_type}"
+                            self._fetched_data_cache.add(cache_key)
+                            
+                            # Report progress if callback provided
+                            if callback:
+                                callback(ticker, category, info_type, True)
+                    except Exception as e:
+                        # Report failure if callback provided
+                        if callback:
+                            callback(ticker, category, info_type, False, error=str(e))
+                
+                # Add category data if we got anything
+                if category_data:
+                    ticker_data[category] = category_data
+            
+            # Add ticker data to results
+            if ticker_data:
+                results[ticker] = ticker_data
+        
+        return results
 
     def _get_analysis_and_holdings(self, ticker, info_type):
         """Get analysis and holdings data for the stock."""
