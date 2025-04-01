@@ -348,25 +348,39 @@ class DatabaseManager:
     def get_available_data(self):
         """Get a list of all available data in the database with timestamps."""
         try:
+            # Ensure database is initialized
+            self.initialize_database()
+            
             conn = self.connect()
             
-            self.cursor.execute('''
-            SELECT 
-                t.symbol, 
-                dc.name AS category, 
-                dt.name AS info_type, 
-                s.fetch_timestamp,
-                s.data_timestamp,
-                s.source
-            FROM stock_data s
-            JOIN tickers t ON s.ticker_id = t.id
-            JOIN data_types dt ON s.data_type_id = dt.id
-            JOIN data_categories dc ON dt.category_id = dc.id
-            ORDER BY t.symbol, dc.name, dt.name
-            ''')
-            
-            results = self.cursor.fetchall()
-            return results
+            # First check if the needed tables exist
+            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='stock_data'")
+            if not self.cursor.fetchone():
+                print("The stock_data table does not exist yet")
+                return []
+                
+            try:
+                self.cursor.execute('''
+                SELECT 
+                    t.symbol, 
+                    dc.name AS category, 
+                    dt.name AS info_type, 
+                    s.fetch_timestamp,
+                    s.data_timestamp,
+                    s.source
+                FROM stock_data s
+                JOIN tickers t ON s.ticker_id = t.id
+                JOIN data_types dt ON s.data_type_id = dt.id
+                JOIN data_categories dc ON dt.category_id = dc.id
+                ORDER BY t.symbol, dc.name, dt.name
+                ''')
+                
+                results = self.cursor.fetchall()
+                return results
+            except Exception as e:
+                print(f"Error executing query: {e}")
+                return []
+                
         except Exception as e:
             print(f"Error retrieving available data: {e}")
             return []
@@ -401,25 +415,36 @@ class DatabaseManager:
     def clear_database(self):
         """Delete all data from the database but keep the schema."""
         try:
+            # Make sure database is initialized first
+            self.initialize_database()
+            
             conn = self.connect()
             
             # Delete all data in proper order (respecting foreign keys)
-            self.cursor.execute("DELETE FROM stock_data")
-            self.cursor.execute("DELETE FROM tickers")
+            try:
+                self.cursor.execute("DELETE FROM stock_data")
+            except Exception as e:
+                print(f"Warning while clearing stock_data: {e}")
+                
+            try:
+                self.cursor.execute("DELETE FROM tickers")
+            except Exception as e:
+                print(f"Warning while clearing tickers: {e}")
             
             # Reset auto-increment counters
-            self.cursor.execute("DELETE FROM sqlite_sequence WHERE name='stock_data'")
-            self.cursor.execute("DELETE FROM sqlite_sequence WHERE name='tickers'") 
+            try:
+                self.cursor.execute("DELETE FROM sqlite_sequence WHERE name='stock_data'")
+                self.cursor.execute("DELETE FROM sqlite_sequence WHERE name='tickers'") 
+            except Exception as e:
+                print(f"Warning while resetting sequences: {e}")
             
             conn.commit()
-            
-            # Reinitialize the database schema if needed
-            self.initialize_database()
             
             return True
         except Exception as e:
             print(f"Error clearing database: {e}")
-            conn.rollback()
+            if 'conn' in locals() and conn:
+                conn.rollback()
             return False
         finally:
             self.close()

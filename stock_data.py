@@ -58,40 +58,69 @@ class StockDataFetcher:
             return False
             
         try:
-            # Use database manager to check for existing data
-            conn = self.db_manager.connect()
-            cursor = conn.cursor()
-            
-            # Query to check if data exists and is fresh
-            cursor.execute('''
-            SELECT s.fetch_timestamp
-            FROM stock_data s
-            JOIN tickers t ON s.ticker_id = t.id
-            JOIN data_types dt ON s.data_type_id = dt.id
-            JOIN data_categories dc ON dt.category_id = dc.id
-            WHERE t.symbol = ? AND dc.name = ? AND dt.name = ?
-            ''', (ticker_symbol, category, info_type))
-            
-            result = cursor.fetchone()
-            
-            # Close connection
-            conn.close()
-            
-            if result:
-                fetch_timestamp = result[0]
-                try:
-                    # Convert to datetime for age check
-                    fetch_time = pd.to_datetime(fetch_timestamp)
-                    now = pd.Timestamp.now()
-                    age_hours = (now - fetch_time).total_seconds() / 3600
-                    
-                    # If fresh enough, data exists
-                    return age_hours <= max_age_hours
-                except:
-                    # If can't parse timestamp, assume data exists but is old
+            # First check if database is fully initialized
+            try:
+                # Check if the tables exist
+                conn = self.db_manager.connect()
+                cursor = conn.cursor()
+                
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='stock_data'")
+                if not cursor.fetchone():
+                    print("The stock_data table does not exist yet - database not fully initialized")
+                    conn.close()
                     return False
-            else:
-                # No data found
+                    
+                # Also check for other needed tables
+                for table in ['tickers', 'data_categories', 'data_types']:
+                    cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'")
+                    if not cursor.fetchone():
+                        print(f"The {table} table does not exist yet - database not fully initialized")
+                        conn.close()
+                        return False
+                
+                conn.close()
+            except Exception as e:
+                print(f"Error checking database structure: {e}")
+                return False
+                
+            # Use database manager to check for existing data
+            try:
+                conn = self.db_manager.connect()
+                cursor = conn.cursor()
+                
+                # Query to check if data exists and is fresh
+                cursor.execute('''
+                SELECT s.fetch_timestamp
+                FROM stock_data s
+                JOIN tickers t ON s.ticker_id = t.id
+                JOIN data_types dt ON s.data_type_id = dt.id
+                JOIN data_categories dc ON dt.category_id = dc.id
+                WHERE t.symbol = ? AND dc.name = ? AND dt.name = ?
+                ''', (ticker_symbol, category, info_type))
+                
+                result = cursor.fetchone()
+                
+                # Close connection
+                conn.close()
+                
+                if result:
+                    fetch_timestamp = result[0]
+                    try:
+                        # Convert to datetime for age check
+                        fetch_time = pd.to_datetime(fetch_timestamp)
+                        now = pd.Timestamp.now()
+                        age_hours = (now - fetch_time).total_seconds() / 3600
+                        
+                        # If fresh enough, data exists
+                        return age_hours <= max_age_hours
+                    except:
+                        # If can't parse timestamp, assume data exists but is old
+                        return False
+                else:
+                    # No data found
+                    return False
+            except Exception as e:
+                print(f"Error checking for existing data: {e}")
                 return False
                 
         except Exception as e:
