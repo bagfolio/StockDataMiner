@@ -42,9 +42,14 @@ This guide explains how to set up MongoDB Atlas (cloud database) to use with the
    - Select "Python" as your driver and the version "3.6 or later"
    - Copy your connection string which looks like:
      ```
-     mongodb+srv://<username>:<password>@<cluster-name>.mongodb.net/?retryWrites=true&w=majority
+     mongodb+srv://<username>:<password>@<cluster-name>.mongodb.net/?retryWrites=true&w=majority&appName=YourAppName
      ```
    - Replace `<username>` and `<password>` with your database user credentials
+   - Example format:
+     ```
+     mongodb+srv://thatguy14066:TZsgoq2OzEUbmmlq@swipecloud1.loenl1s.mongodb.net/?retryWrites=true&w=majority&appName=SwipeCloud1
+     ```
+   - Make sure pymongo[srv] and dnspython packages are installed
 
 6. **Use in the Stock Data Scraper**:
    - Select "MongoDB (Cloud)" in the sidebar
@@ -64,6 +69,10 @@ The application creates the following collections in MongoDB:
 - **Connection Issues**: Make sure your IP address is allowed in the Network Access list
 - **Authentication Failed**: Double-check your username and password in the connection string
 - **Timeout Errors**: Check your internet connection
+- **ModuleNotFoundError: No module named 'pymongo'**: Run `pip install pymongo[srv] dnspython`
+- **ServerSelectionTimeoutError**: This could be due to network issues, firewall blocking MongoDB port, or incorrect connection string
+- **Invalid hostname in URI**: Make sure the cluster name in your connection string is correct
+- **URI must include username and password**: Ensure you've replaced `<username>` and `<password>` with your actual credentials
 
 If you encounter persistent issues, the application will automatically fall back to SQLite for local storage.
 
