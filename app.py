@@ -14,6 +14,8 @@ from stock_data import StockDataFetcher
 # Import MongoDB manager with a fallback mechanism
 try:
     from mongodb_manager import MongoDBManager, HAS_PYMONGO, ObjectId
+    import pymongo
+    import dnspython
 except ImportError:
     HAS_PYMONGO = False
     

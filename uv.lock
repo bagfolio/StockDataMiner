@@ -1109,7 +1109,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.70.0" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "plotly", specifier = ">=6.0.1" },
-    { name = "pymongo", specifier = ">=4.11.3" },
+    { name = "pymongo", extras = ["srv"], specifier = ">=4.11.3" },
     { name = "requests-cache", specifier = ">=1.2.1" },
     { name = "streamlit", specifier = ">=1.44.0" },
     { name = "trafilatura", specifier = ">=2.0.0" },

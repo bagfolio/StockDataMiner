@@ -14,6 +14,7 @@ class ObjectId:
 # Try importing pymongo with a fallback
 try:
     import pymongo
+    import dnspython
     HAS_PYMONGO = True
 except ImportError:
     HAS_PYMONGO = False
@@ -21,43 +22,49 @@ except ImportError:
     class MongoDBManager:
         def __init__(self, *args, **kwargs):
             raise ImportError("MongoDB (pymongo) package is not properly installed")
-
-class MongoDBManager:
-    def __init__(self, connection_string=None):
-        """
-        Initialize connection to MongoDB
+    # Skip the rest of the file if pymongo isn't available
+    if not HAS_PYMONGO:
+        # Define a bare minimum class to avoid import errors
+        __all__ = ['MongoDBManager', 'ObjectId', 'HAS_PYMONGO']
         
-        Parameters:
-        connection_string (str, optional): MongoDB connection string
-            If None, will try to use MONGODB_URI environment variable
-        """
-        # Use provided connection string or try environment variable
-        if connection_string is None:
-            connection_string = os.environ.get('MONGODB_URI')
+# Only define the real MongoDBManager if pymongo is available
+if HAS_PYMONGO:
+    class MongoDBManager:
+        def __init__(self, connection_string=None):
+            """
+            Initialize connection to MongoDB
             
-        if not connection_string:
-            raise ValueError("MongoDB connection string is required. Either provide it directly or set MONGODB_URI environment variable.")
+            Parameters:
+            connection_string (str, optional): MongoDB connection string
+                If None, will try to use MONGODB_URI environment variable
+            """
+            # Use provided connection string or try environment variable
+            if connection_string is None:
+                connection_string = os.environ.get('MONGODB_URI')
+                
+            if not connection_string:
+                raise ValueError("MongoDB connection string is required. Either provide it directly or set MONGODB_URI environment variable.")
+                
+            # Connect to MongoDB
+            self.client = pymongo.MongoClient(connection_string)
+            self.db = self.client["stock_data"]
             
-        # Connect to MongoDB
-        self.client = pymongo.MongoClient(connection_string)
-        self.db = self.client["stock_data"]
+            # Create collections (similar to tables)
+            self.tickers = self.db["tickers"]
+            self.data_types = self.db["data_types"]
+            self.stock_data = self.db["stock_data"]
+            
+            # Create indexes for faster queries
+            self._create_indexes()
         
-        # Create collections (similar to tables)
-        self.tickers = self.db["tickers"]
-        self.data_types = self.db["data_types"]
-        self.stock_data = self.db["stock_data"]
-        
-        # Create indexes for faster queries
-        self._create_indexes()
-        
-    def _create_indexes(self):
-        """Create necessary indexes for performance"""
-        try:
-            self.tickers.create_index("symbol", unique=True)
-            self.data_types.create_index([("category", 1), ("info_type", 1)], unique=True)
-            self.stock_data.create_index([("ticker_id", 1), ("data_type_id", 1)])
-        except Exception as e:
-            print(f"Warning: Could not create indexes: {e}")
+        def _create_indexes(self):
+            """Create necessary indexes for performance"""
+            try:
+                self.tickers.create_index("symbol", unique=True)
+                self.data_types.create_index([("category", 1), ("info_type", 1)], unique=True)
+                self.stock_data.create_index([("ticker_id", 1), ("data_type_id", 1)])
+            except Exception as e:
+                print(f"Warning: Could not create indexes: {e}")
     
     def get_or_create_ticker_id(self, ticker_symbol, name=None, exchange=None):
         """
