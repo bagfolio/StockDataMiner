@@ -6,6 +6,7 @@ import yfinance as yf
 import os
 import time
 import numpy as np
+import datetime
 from database import DatabaseManager
 from stock_data import StockDataFetcher
 
@@ -150,27 +151,71 @@ def display_loading(message):
     with st.spinner(message):
         time.sleep(0.5)  # Small delay for visual feedback
 
-# Function to fetch data
+# Function to fetch data with optimized batch processing
 def fetch_data(symbols, category, info_type):
     all_data = {}
-    for symbol in symbols:
-        try:
-            # Get data based on selected category and info type
-            data = data_fetcher.get_data(symbol, category, info_type)
-            
-            if data is not None and not data.empty:
-                all_data[symbol] = data
+    
+    try:
+        # Use batch processing for efficiency
+        if len(symbols) > 1 and category == "Historical Data" and info_type == "Price History":
+            # Efficient batch download for price history
+            with st.spinner(f"Batch downloading price history for {len(symbols)} tickers..."):
+                # Get data for all symbols in one API call (much faster)
+                batch_data = data_fetcher.get_multiple_data(symbols, category, info_type)
                 
-                # Store data in database
-                db_manager.store_data(symbol, category, info_type, data)
-            else:
-                st.warning(f"No data available for {symbol} - {info_type}")
-        except Exception as e:
-            st.error(f"Error fetching {info_type} for {symbol}: {str(e)}")
+                if batch_data:
+                    for symbol, data in batch_data.items():
+                        if data is not None and not data.empty:
+                            all_data[symbol] = data
+                            
+                            # Extract metadata from dataframe attributes
+                            source = None
+                            data_timestamp = None
+                            
+                            if hasattr(data, 'attrs'):
+                                fetch_timestamp = data.attrs.get('fetch_timestamp')
+                                data_timestamp = data.attrs.get('data_timestamp')
+                                source = data.attrs.get('source')
+                            
+                            # Store in database with metadata
+                            db_manager.store_data(symbol, category, info_type, data, 
+                                                data_timestamp=data_timestamp, source=source)
+                        else:
+                            st.warning(f"No price history available for {symbol}")
+                            
+                return all_data
+        
+        # For other data types or single symbol requests, process individually
+        for symbol in symbols:
+            try:
+                # Get data based on selected category and info type
+                data = data_fetcher.get_data(symbol, category, info_type)
+                
+                if data is not None and not data.empty:
+                    all_data[symbol] = data
+                    
+                    # Extract metadata from dataframe attributes
+                    source = None
+                    data_timestamp = None
+                    
+                    if hasattr(data, 'attrs'):
+                        fetch_timestamp = data.attrs.get('fetch_timestamp')
+                        data_timestamp = data.attrs.get('data_timestamp')
+                        source = data.attrs.get('source')
+                    
+                    # Store in database with metadata
+                    db_manager.store_data(symbol, category, info_type, data, 
+                                         data_timestamp=data_timestamp, source=source)
+                else:
+                    st.warning(f"No data available for {symbol} - {info_type}")
+            except Exception as e:
+                st.error(f"Error fetching {info_type} for {symbol}: {str(e)}")
+    except Exception as e:
+        st.error(f"Error in batch processing: {str(e)}")
     
     return all_data
 
-# Function to display data and visualizations
+# Function to display data and visualizations with timestamp and source info
 def display_data(all_data, category, info_type):
     if not all_data:
         return
@@ -182,6 +227,26 @@ def display_data(all_data, category, info_type):
         ticker_tabs = st.tabs(list(all_data.keys()))
         for i, (symbol, data) in enumerate(all_data.items()):
             with ticker_tabs[i]:
+                # Display metadata (timestamp and source information)
+                with st.expander("Data Metadata", expanded=True):
+                    metadata_cols = st.columns(2)
+                    
+                    with metadata_cols[0]:
+                        # Show fetch timestamp
+                        fetch_time = data.attrs.get('fetch_timestamp', 'Unknown') if hasattr(data, 'attrs') else 'Unknown'
+                        st.info(f"**Data Fetched:** {fetch_time}")
+                        
+                        # Show data timestamp if available (when the data was actually reported/created)
+                        data_time = data.attrs.get('data_timestamp', '') if hasattr(data, 'attrs') else ''
+                        if data_time:
+                            st.info(f"**Data Reported/Created:** {data_time}")
+                    
+                    with metadata_cols[1]:
+                        # Show source information if available
+                        source = data.attrs.get('source', '') if hasattr(data, 'attrs') else ''
+                        if source:
+                            st.info(f"**Data Source/Provider:** {source}")
+                
                 # Format numeric columns for better readability
                 formatted_data = data.copy()
                 for col in formatted_data.select_dtypes(include=['number']).columns:
@@ -195,6 +260,26 @@ def display_data(all_data, category, info_type):
         # Single ticker display
         symbol = list(all_data.keys())[0]
         data = all_data[symbol]
+        
+        # Display metadata (timestamp and source information)
+        with st.expander("Data Metadata", expanded=True):
+            metadata_cols = st.columns(2)
+            
+            with metadata_cols[0]:
+                # Show fetch timestamp
+                fetch_time = data.attrs.get('fetch_timestamp', 'Unknown') if hasattr(data, 'attrs') else 'Unknown'
+                st.info(f"**Data Fetched:** {fetch_time}")
+                
+                # Show data timestamp if available (when the data was actually reported/created)
+                data_time = data.attrs.get('data_timestamp', '') if hasattr(data, 'attrs') else ''
+                if data_time:
+                    st.info(f"**Data Reported/Created:** {data_time}")
+            
+            with metadata_cols[1]:
+                # Show source information if available
+                source = data.attrs.get('source', '') if hasattr(data, 'attrs') else ''
+                if source:
+                    st.info(f"**Data Source/Provider:** {source}")
         
         # Format numeric columns for better readability
         formatted_data = data.copy()
@@ -212,9 +297,13 @@ def display_data(all_data, category, info_type):
     # Combine all data into a single DataFrame for export
     combined_data = pd.concat(all_data.values(), keys=all_data.keys(), names=['Ticker'])
     
+    # Add metadata columns to the exported data
+    export_data = combined_data.copy()
+    
     # Export as CSV
-    csv = combined_data.to_csv()
-    export_name = f"{'_'.join(all_data.keys())}_{info_type.replace(' ', '_')}.csv"
+    csv = export_data.to_csv()
+    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    export_name = f"{'_'.join(all_data.keys())}_{info_type.replace(' ', '_')}_{current_time}.csv"
     st.download_button(
         label="Download as CSV",
         data=csv,
@@ -288,8 +377,49 @@ def fetch_all_data(symbol):
                     
                     all_category_data[category][info_type] = data
                     
-                    # Store in database
-                    db_manager.store_data(symbol, category, info_type, data)
+                    # Extract metadata from dataframe attributes
+                    source = None
+                    data_timestamp = None
+                    
+                    if hasattr(data, 'attrs'):
+                        fetch_timestamp = data.attrs.get('fetch_timestamp')
+                        data_timestamp = data.attrs.get('data_timestamp')
+                        source = data.attrs.get('source')
+                    
+                    # Special processing for analyst data to identify sources
+                    if category == "Analysis & Holdings":
+                        try:
+                            # For recommendations, extract firm names as source
+                            if info_type in ["Recommendations", "Upgrades Downgrades"] and "Firm" in data.columns:
+                                # Get unique firms
+                                unique_firms = data["Firm"].unique().tolist()
+                                if unique_firms:
+                                    # Use up to 5 firm names as source
+                                    if len(unique_firms) > 5:
+                                        source = f"{', '.join(unique_firms[:5])} and {len(unique_firms) - 5} others"
+                                    else:
+                                        source = ', '.join(unique_firms)
+                            
+                            # For earnings data, try to extract source
+                            if "Source" in data.columns:
+                                sources = data["Source"].unique().tolist()
+                                if sources:
+                                    source = ', '.join(sources[:3])
+                            
+                            # For any dated information, try to use the date from index as data_timestamp
+                            if hasattr(data.index, 'name') and data.index.name in ['Date', 'Timestamp', 'Period', 'Quarter', 'Year'] and len(data) > 0:
+                                # Find most recent date
+                                if hasattr(data.index, 'max'):
+                                    most_recent = data.index.max()
+                                    if isinstance(most_recent, (pd.Timestamp, datetime.datetime, datetime.date, str)):
+                                        data_timestamp = str(most_recent)
+                        except Exception as ex:
+                            # Just continue if metadata extraction fails
+                            pass
+                    
+                    # Store in database with metadata
+                    db_manager.store_data(symbol, category, info_type, data, 
+                                         data_timestamp=data_timestamp, source=source)
             except Exception as e:
                 st.error(f"Error fetching {info_type} for {symbol}: {str(e)}")
             
@@ -463,6 +593,27 @@ if stored_data:
                 
                 if stored_df is not None and not stored_df.empty:
                     st.subheader(f"Stored Data: {selected_stored_ticker} - {selected_stored_info}")
+                    
+                    # Display metadata with timestamp and source information
+                    with st.expander("Data Metadata", expanded=True):
+                        metadata_cols = st.columns(2)
+                        
+                        with metadata_cols[0]:
+                            # Show fetch timestamp
+                            fetch_time = stored_df.attrs.get('fetch_timestamp', 'Unknown') if hasattr(stored_df, 'attrs') else 'Unknown'
+                            st.info(f"**Data Fetched:** {fetch_time}")
+                            
+                            # Show data timestamp if available (when the data was actually reported/created)
+                            data_time = stored_df.attrs.get('data_timestamp', '') if hasattr(stored_df, 'attrs') else ''
+                            if data_time:
+                                st.info(f"**Data Reported/Created:** {data_time}")
+                        
+                        with metadata_cols[1]:
+                            # Show source information if available
+                            source = stored_df.attrs.get('source', '') if hasattr(stored_df, 'attrs') else ''
+                            if source:
+                                st.info(f"**Data Source/Provider:** {source}")
+                    
                     # Format numeric columns for better readability
                     formatted_df = stored_df.copy()
                     for col in formatted_df.select_dtypes(include=['number']).columns:
@@ -470,9 +621,13 @@ if stored_data:
                         
                     st.dataframe(formatted_df)
                     
+                    # Create visualization if possible for stored data
+                    create_visualization(stored_df, selected_stored_ticker, selected_stored_category, selected_stored_info)
+                    
                     # Export stored data as CSV
                     csv = stored_df.to_csv()
-                    export_name = f"{selected_stored_ticker}_{selected_stored_info.replace(' ', '_')}_stored.csv"
+                    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    export_name = f"{selected_stored_ticker}_{selected_stored_info.replace(' ', '_')}_{current_time}.csv"
                     st.download_button(
                         label="Download Stored Data as CSV",
                         data=csv,
@@ -484,16 +639,35 @@ if stored_data:
 else:
     st.sidebar.write("No data has been stored yet.")
 
-# Export database section
+# Export and manage database section
 st.markdown("---")
-st.subheader("Export Database")
-with open("stock_data.db", "rb") as file:
-    btn = st.download_button(
-        label="Download Database File",
-        data=file,
-        file_name="stock_data.db",
-        mime="application/octet-stream"
-    )
+st.subheader("Database Management")
+
+# Two columns for export and reset
+db_cols = st.columns(2)
+
+with db_cols[0]:
+    # Export database
+    with open("stock_data.db", "rb") as file:
+        btn = st.download_button(
+            label="Download Database File",
+            data=file,
+            file_name="stock_data.db",
+            mime="application/octet-stream"
+        )
+
+with db_cols[1]:
+    # Clear database button with confirmation
+    clear_db = st.button("Clear Database and Start Fresh", type="secondary")
+    if clear_db:
+        clear_confirm = st.checkbox("Confirm clearing the entire database? This cannot be undone.")
+        if clear_confirm:
+            if db_manager.clear_database():
+                st.success("Database cleared successfully. All stored data has been removed.")
+                # Force a rerun to update the sidebar
+                st.experimental_rerun()
+            else:
+                st.error("Failed to clear database. Please try again.")
 
 # Footer with information
 st.markdown("---")

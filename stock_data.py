@@ -2,11 +2,27 @@ import yfinance as yf
 import pandas as pd
 import datetime
 import time
+import numpy as np
+import threading
+import requests_cache
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class StockDataFetcher:
     def __init__(self):
-        """Initialize the stock data fetcher."""
-        pass
+        """Initialize the stock data fetcher with caching."""
+        # Create a cached session that will be reused across requests
+        # This dramatically improves performance by avoiding redundant API calls
+        # Cache expires after 15 minutes (900 seconds) for somewhat fresh data
+        self.session = requests_cache.CachedSession(
+            cache_name='yfinance_cache',
+            backend='sqlite',
+            expire_after=900
+        )
+        
+        # Set up headers to mimic a browser request to avoid rate limiting
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+        })
 
     def get_data(self, ticker_symbol, category, info_type):
         """
@@ -18,25 +34,280 @@ class StockDataFetcher:
         info_type (str): The specific type of information within the category
         
         Returns:
-        DataFrame: The requested stock data
+        DataFrame: The requested stock data with timestamp and source metadata
         """
         try:
-            # Create a Ticker object for the given symbol
-            ticker = yf.Ticker(ticker_symbol)
+            # Add fetch timestamp to track when data was retrieved
+            fetch_timestamp = pd.Timestamp.now()
+            
+            # Create a Ticker object for the given symbol with our cached session
+            ticker = yf.Ticker(ticker_symbol, session=self.session)
             
             # Fetch data based on category and info type
+            data = None
             if category == "General Information":
-                return self._get_general_info(ticker, info_type)
+                data = self._get_general_info(ticker, info_type)
             elif category == "Historical Data":
-                return self._get_historical_data(ticker, info_type)
+                data = self._get_historical_data(ticker, info_type)
             elif category == "Financial Statements":
-                return self._get_financial_statements(ticker, info_type)
+                data = self._get_financial_statements(ticker, info_type)
             elif category == "Analysis & Holdings":
-                return self._get_analysis_and_holdings(ticker, info_type)
+                data = self._get_analysis_and_holdings(ticker, info_type)
             else:
                 raise ValueError(f"Unknown category: {category}")
+            
+            # Add metadata to the dataframe if it's not empty
+            if data is not None and not data.empty:
+                # Using a clean approach that works with any dataframe structure
+                if isinstance(data, pd.DataFrame):
+                    # Store the fetch timestamp as a dataframe attribute
+                    data.attrs['fetch_timestamp'] = fetch_timestamp.isoformat()
+                    data.attrs['ticker'] = ticker_symbol
+                    data.attrs['category'] = category
+                    data.attrs['info_type'] = info_type
+                    
+                    # Set default source
+                    if 'source' not in data.attrs:
+                        data.attrs['source'] = 'Yahoo Finance'
+                    
+                    # Set data timestamp based on data type
+                    if 'data_timestamp' not in data.attrs:
+                        # For historical data, use the most recent date in the index
+                        if category == "Historical Data" and hasattr(data.index, 'max'):
+                            try:
+                                most_recent = data.index.max()
+                                if isinstance(most_recent, (pd.Timestamp, datetime.datetime, datetime.date)):
+                                    data.attrs['data_timestamp'] = most_recent.isoformat()
+                            except:
+                                pass
+                                
+                        # For financial statements, try to use the column names as timestamps
+                        elif category == "Financial Statements" and hasattr(data, 'columns'):
+                            try:
+                                if isinstance(data.columns[0], (pd.Timestamp, datetime.datetime, datetime.date)):
+                                    most_recent = max(data.columns)
+                                    data.attrs['data_timestamp'] = most_recent.isoformat()
+                            except:
+                                pass
+                                
+                        # For analysis data with a date column
+                        elif category == "Analysis & Holdings":
+                            try:
+                                # For recommendations, analysts, etc. with date columns
+                                date_columns = [col for col in data.columns if col in 
+                                              ['Date', 'date', 'Announcement Date', 'Period', 'Quarter', 
+                                               'Report Date', 'Last Updated']]
+                                if date_columns and len(date_columns) > 0:
+                                    col = date_columns[0]
+                                    if not data[col].empty:
+                                        most_recent = data[col].max()
+                                        if isinstance(most_recent, (pd.Timestamp, datetime.datetime, datetime.date, str)):
+                                            if isinstance(most_recent, str):
+                                                # Try to parse string to datetime
+                                                try:
+                                                    most_recent = pd.to_datetime(most_recent)
+                                                except:
+                                                    pass
+                                            data.attrs['data_timestamp'] = str(most_recent)
+                            except:
+                                pass
+                    
+                    # Enhance source information for specific data types
+                    self._enhance_data_metadata(data, category, info_type)
+            
+            return data
         except Exception as e:
             raise Exception(f"Error fetching {info_type} for {ticker_symbol}: {str(e)}")
+            
+    def _enhance_data_metadata(self, data, category, info_type):
+        """
+        Add enhanced metadata to the dataframe for specific data types
+        
+        Parameters:
+        data (DataFrame): The data to enhance
+        category (str): The category of information
+        info_type (str): The specific type of information within the category
+        """
+        try:
+            # For Analysis & Holdings data, add more specific source information
+            if category == "Analysis & Holdings":
+                # For recommendations, add firm names as source
+                if info_type in ["Recommendations", "Upgrades Downgrades"] and "Firm" in data.columns:
+                    # Get unique firms
+                    unique_firms = data["Firm"].unique().tolist()
+                    if unique_firms:
+                        # Use up to 5 firm names as source
+                        if len(unique_firms) > 5:
+                            data.attrs['source'] = f"{', '.join(unique_firms[:5])} and {len(unique_firms) - 5} others (via Yahoo Finance)"
+                        else:
+                            data.attrs['source'] = f"{', '.join(unique_firms)} (via Yahoo Finance)"
+                
+                # For analyst price targets, extract source from data
+                if info_type == "Analyst Price Target" and not data.empty:
+                    try:
+                        firm_col = None
+                        for col in ["Firm", "Analyst", "Source"]:
+                            if col in data.columns:
+                                firm_col = col
+                                break
+                                
+                        if firm_col and not data[firm_col].empty:
+                            unique_sources = data[firm_col].unique().tolist()
+                            if unique_sources:
+                                # Use up to 3 sources
+                                if len(unique_sources) > 3:
+                                    data.attrs['source'] = f"{', '.join(unique_sources[:3])} and {len(unique_sources) - 3} others (via Yahoo Finance)"
+                                else:
+                                    data.attrs['source'] = f"{', '.join(unique_sources)} (via Yahoo Finance)"
+                    except:
+                        pass
+                
+                # For institutional holders, add institutional names
+                if info_type in ["Institutional Holders", "Major Holders", "Mutual Fund Holders"] and "Holder" in data.columns:
+                    try:
+                        top_holders = data["Holder"].head(3).tolist()
+                        if top_holders:
+                            holder_count = len(data["Holder"].unique())
+                            data.attrs['source'] = f"Top holders include {', '.join(top_holders)}" + \
+                                f" and {holder_count - 3} others (via Yahoo Finance)" if holder_count > 3 else " (via Yahoo Finance)"
+                    except:
+                        pass
+                        
+                # For insider transactions, add insider names
+                if info_type in ["Insider Transactions", "Insider Purchases"] and "Insider" in data.columns:
+                    try:
+                        insiders = data["Insider"].unique().tolist()
+                        if insiders:
+                            if len(insiders) > 3:
+                                data.attrs['source'] = f"{', '.join(insiders[:3])} and {len(insiders) - 3} others (via Yahoo Finance)"
+                            else:
+                                data.attrs['source'] = f"{', '.join(insiders)} (via Yahoo Finance)"
+                    except:
+                        pass
+            
+            # For financial statements, add the reporting period
+            elif category == "Financial Statements":
+                try:
+                    if hasattr(data, 'columns') and len(data.columns) > 0:
+                        periods = [str(col) for col in data.columns]
+                        if periods:
+                            data.attrs['source'] = f"Financial data for periods: {', '.join(periods)} (via Yahoo Finance)"
+                except:
+                    pass
+                    
+            # For news data, add providers as source
+            elif category == "General Information" and info_type == "News":
+                try:
+                    if "provider" in data.columns:
+                        providers = data["provider"].unique().tolist()
+                        if providers:
+                            if len(providers) > 3:
+                                data.attrs['source'] = f"{', '.join(providers[:3])} and {len(providers) - 3} other news sources"
+                            else:
+                                data.attrs['source'] = f"{', '.join(providers)}"
+                except:
+                    pass
+        except Exception as e:
+            # If anything fails, just continue without enhanced metadata
+            print(f"Error enhancing metadata: {str(e)}")
+            pass
+            
+    def get_multiple_data(self, ticker_symbols, category, info_type):
+        """
+        Fetch the same data for multiple ticker symbols efficiently
+        
+        Parameters:
+        ticker_symbols (list): List of ticker symbols
+        category (str): The category of information to fetch
+        info_type (str): The specific type of information within the category
+        
+        Returns:
+        dict: Dictionary mapping ticker symbols to their respective data with enhanced metadata
+        """
+        results = {}
+        
+        # For historical price data, use batch download
+        if category == "Historical Data" and info_type == "Price History":
+            try:
+                # Use yf.download for efficient batch history download
+                data = yf.download(
+                    tickers=ticker_symbols,
+                    period="5y",  # Always fetch at least 5 years of data when available
+                    group_by='ticker',
+                    auto_adjust=True,
+                    repair=True,  # Repair common data issues
+                    threads=True,  # Use multithreading
+                    session=self.session  # Use our cached session
+                )
+                
+                fetch_timestamp = pd.Timestamp.now().isoformat()
+                
+                # Handle both single ticker and multiple ticker cases
+                if len(ticker_symbols) == 1:
+                    ticker = ticker_symbols[0]
+                    results[ticker] = data
+                    
+                    # Add metadata
+                    results[ticker].attrs['fetch_timestamp'] = fetch_timestamp
+                    results[ticker].attrs['ticker'] = ticker
+                    results[ticker].attrs['category'] = category
+                    results[ticker].attrs['info_type'] = info_type
+                    results[ticker].attrs['source'] = 'Yahoo Finance'
+                    
+                    # Add data timestamp (most recent date)
+                    if hasattr(data.index, 'max'):
+                        try:
+                            most_recent = data.index.max()
+                            if isinstance(most_recent, (pd.Timestamp, datetime.datetime, datetime.date)):
+                                results[ticker].attrs['data_timestamp'] = most_recent.isoformat()
+                        except:
+                            pass
+                else:
+                    for ticker in ticker_symbols:
+                        if ticker in data.columns.levels[0]:
+                            ticker_data = data[ticker]
+                            
+                            # Add metadata
+                            ticker_data.attrs['fetch_timestamp'] = fetch_timestamp
+                            ticker_data.attrs['ticker'] = ticker
+                            ticker_data.attrs['category'] = category
+                            ticker_data.attrs['info_type'] = info_type
+                            ticker_data.attrs['source'] = 'Yahoo Finance'
+                            
+                            # Add data timestamp (most recent date)
+                            if hasattr(ticker_data.index, 'max'):
+                                try:
+                                    most_recent = ticker_data.index.max()
+                                    if isinstance(most_recent, (pd.Timestamp, datetime.datetime, datetime.date)):
+                                        ticker_data.attrs['data_timestamp'] = most_recent.isoformat()
+                                except:
+                                    pass
+                            
+                            results[ticker] = ticker_data
+                
+                return results
+            except Exception as e:
+                print(f"Batch download failed: {str(e)}. Falling back to individual fetching.")
+                # If batch download fails, fall back to individual fetching
+        
+        # For most other data types, use parallel processing for better performance
+        with ThreadPoolExecutor(max_workers=min(10, len(ticker_symbols))) as executor:
+            # Create a function for thread to execute
+            def fetch_ticker_data(ticker):
+                try:
+                    return ticker, self.get_data(ticker, category, info_type)
+                except Exception as e:
+                    print(f"Error fetching {info_type} for {ticker}: {str(e)}")
+                    return ticker, None
+            
+            # Submit all tasks and process results as they complete
+            future_to_ticker = {executor.submit(fetch_ticker_data, ticker): ticker for ticker in ticker_symbols}
+            for future in as_completed(future_to_ticker):
+                ticker, data = future.result()
+                if data is not None:
+                    results[ticker] = data
+        
+        return results
 
     def _get_general_info(self, ticker, info_type):
         """Get general information about the stock."""

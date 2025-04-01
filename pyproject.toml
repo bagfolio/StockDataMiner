@@ -9,6 +9,7 @@ dependencies = [
     "openai>=1.70.0",
     "pandas>=2.2.3",
     "plotly>=6.0.1",
+    "requests-cache>=1.2.1",
     "streamlit>=1.44.0",
     "trafilatura>=2.0.0",
     "yfinance>=0.2.55",
