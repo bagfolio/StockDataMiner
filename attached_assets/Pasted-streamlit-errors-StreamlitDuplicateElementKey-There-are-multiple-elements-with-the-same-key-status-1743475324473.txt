@@ -1,0 +1,33 @@
+streamlit.errors.StreamlitDuplicateElementKey: There are multiple elements with the same key='status_updates'. To fix this, please make sure that the key argument is unique for each element you create.
+
+Traceback:
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 121, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 640, in code_to_exec
+    exec(code, module.__dict__)
+File "/home/runner/workspace/app.py", line 635, in <module>
+    batch_results = batch_process_tickers(
+                    ^^^^^^^^^^^^^^^^^^^^^^
+File "/home/runner/workspace/app.py", line 579, in batch_process_tickers
+    results = data_fetcher.batch_process_tickers(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/home/runner/workspace/stock_data.py", line 742, in batch_process_tickers
+    callback(ticker, category, info_type, False, error=str(e))
+File "/home/runner/workspace/app.py", line 576, in progress_callback
+    callback(status_msg)
+File "/home/runner/workspace/app.py", line 618, in update_status
+    status_area.text_area(
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/runtime/metrics_util.py", line 410, in wrapped_func
+    result = non_optional_func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/elements/widgets/text_widgets.py", line 522, in text_area
+    return self._text_area(
+           ^^^^^^^^^^^^^^^^
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/elements/widgets/text_widgets.py", line 567, in _text_area
+    element_id = compute_and_register_element_id(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/elements/lib/utils.py", line 239, in compute_and_register_element_id
+    _register_element_id(ctx, element_type, element_id)
+File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/streamlit/elements/lib/utils.py", line 140, in _register_element_id
+    raise StreamlitDuplicateElementKey(user_key)

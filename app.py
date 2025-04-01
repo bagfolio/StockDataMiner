@@ -608,18 +608,29 @@ if 'comprehensive_fetch_button' in locals() and comprehensive_fetch_button:
         # For storing status messages
         if 'status_messages' not in st.session_state:
             st.session_state.status_messages = []
+        
+        # Keep track of update count to create unique keys
+        if 'update_counter' not in st.session_state:
+            st.session_state.update_counter = 0
             
         # Function to update status text
         def update_status(message):
             # Add to the beginning of the list (newest first)
             st.session_state.status_messages.insert(0, message)
+            
+            # Create a unique key based on the counter
+            st.session_state.update_counter += 1
+            unique_key = f"status_updates_{st.session_state.update_counter}"
+            
             # Join all messages with newlines and display
             status_text = "\n".join(st.session_state.status_messages)
+            # Use container.markdown instead of text_area to avoid duplicate key issues
+            status_area.empty()  # Clear previous content
             status_area.text_area(
                 "Processing Status (newest at top):",
                 status_text,
                 height=200,
-                key="status_updates"
+                key=unique_key
             )
         
         # Process each batch
