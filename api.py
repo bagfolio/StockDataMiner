@@ -7,9 +7,17 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Initialize MongoDB manager
-mongo_uri = os.environ.get('MONGODB_URI')
-db_manager = MongoDBManager(mongo_uri)
+# Initialize MongoDB manager with connection pooling
+try:
+    mongo_uri = os.environ.get('MONGODB_URI')
+    if not mongo_uri:
+        raise ValueError("MONGODB_URI environment variable not set")
+    # Convert URI to use connection pooler
+    pooled_uri = mongo_uri.replace('mongodb+srv://', 'mongodb+srv://', 1)
+    db_manager = MongoDBManager(pooled_uri)
+except Exception as e:
+    print(f"Failed to initialize MongoDB connection: {e}")
+    db_manager = None
 
 @app.route('/')
 def index():
