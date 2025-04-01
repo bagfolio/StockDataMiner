@@ -17,10 +17,11 @@ class DatabaseManager:
     def connect(self):
         """Connect to the SQLite database."""
         try:
-            self.conn = sqlite3.connect(self.db_name)
-            # Enable foreign keys
-            self.conn.execute("PRAGMA foreign_keys = ON")
-            self.cursor = self.conn.cursor()
+            if self.conn is None:
+                self.conn = sqlite3.connect(self.db_name)
+                # Enable foreign keys
+                self.conn.execute("PRAGMA foreign_keys = ON")
+                self.cursor = self.conn.cursor()
             return self.conn
         except Exception as e:
             print(f"Error connecting to database: {e}")
