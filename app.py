@@ -726,6 +726,7 @@ if 'comprehensive_fetch_button' in locals() and comprehensive_fetch_button:
         status_container = st.empty()
         progress_container = st.empty()
         batch_results_container = st.empty()
+        status_area = st.empty()  # Define status_area for status updates
         
         # Split tickers into batches for processing
         all_tickers = ticker_symbols.copy()
@@ -757,15 +758,10 @@ if 'comprehensive_fetch_button' in locals() and comprehensive_fetch_button:
             unique_key = f"status_updates_{st.session_state.update_counter}"
             
             # Join all messages with newlines and display
-            status_text = "\n".join(st.session_state.status_messages)
-            # Use container.markdown instead of text_area to avoid duplicate key issues
+            status_text = "### Processing Status (newest at top):\n\n" + "\n".join(st.session_state.status_messages)
+            # Use markdown instead of text_area to avoid duplicate key issues
             status_area.empty()  # Clear previous content
-            status_area.text_area(
-                "Processing Status (newest at top):",
-                status_text,
-                height=200,
-                key=unique_key
-            )
+            status_area.markdown(status_text)
         
         # Process each batch
         for i in range(batch_count):

@@ -16,11 +16,17 @@ class DatabaseManager:
 
     def connect(self):
         """Connect to the SQLite database."""
-        self.conn = sqlite3.connect(self.db_name)
-        # Enable foreign keys
-        self.conn.execute("PRAGMA foreign_keys = ON")
-        self.cursor = self.conn.cursor()
-        return self.conn
+        try:
+            self.conn = sqlite3.connect(self.db_name)
+            # Enable foreign keys
+            self.conn.execute("PRAGMA foreign_keys = ON")
+            self.cursor = self.conn.cursor()
+            return self.conn
+        except Exception as e:
+            print(f"Error connecting to database: {e}")
+            self.conn = None
+            self.cursor = None
+            return None
 
     def close(self):
         """Close the database connection."""
@@ -33,12 +39,18 @@ class DatabaseManager:
         """Initialize the database schema if it doesn't exist."""
         try:
             conn = self.connect()
+            if not conn:
+                print("Failed to connect to database during initialization")
+                return False
             
             # Check schema version
             try:
-                self.cursor.execute("SELECT value FROM metadata WHERE key = 'schema_version'")
-                result = self.cursor.fetchone()
-                current_version = int(result[0]) if result else 0
+                if self.cursor:
+                    self.cursor.execute("SELECT value FROM metadata WHERE key = 'schema_version'")
+                    result = self.cursor.fetchone()
+                    current_version = int(result[0]) if result else 0
+                else:
+                    current_version = 0
             except:
                 current_version = 0
             
@@ -48,126 +60,134 @@ class DatabaseManager:
                 # Drop existing tables in proper order (respecting foreign keys)
                 for table in ['stock_data', 'metadata', 'tickers', 'data_categories', 'data_types']:
                     try:
-                        self.cursor.execute(f"DROP TABLE IF EXISTS {table}")
-                    except:
-                        pass
+                        if self.cursor:
+                            self.cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                    except Exception as e:
+                        print(f"Error dropping table {table}: {e}")
                 
-                conn.commit()
+                if conn:
+                    conn.commit()
                 current_version = 0
             
             # If no schema yet, create all tables from scratch
-            if current_version == 0:
-                # Create metadata table for tracking schema version and other info
-                self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS metadata (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                )
-                ''')
-                
-                # Create reference tables for normalization
-                self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS tickers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    symbol TEXT NOT NULL UNIQUE,
-                    name TEXT,
-                    exchange TEXT,
-                    first_fetched DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    last_fetched DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-                ''')
-                
-                self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS data_categories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE
-                )
-                ''')
-                
-                self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS data_types (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    category_id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    UNIQUE(category_id, name),
-                    FOREIGN KEY(category_id) REFERENCES data_categories(id)
-                )
-                ''')
-                
-                # Create main data table with foreign key references
-                self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS stock_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ticker_id INTEGER NOT NULL,
-                    data_type_id INTEGER NOT NULL,
-                    data BLOB NOT NULL,
-                    fetch_timestamp DATETIME NOT NULL,
-                    data_timestamp DATETIME,  -- When the data itself was produced/reported
-                    source TEXT,  -- Who produced the data (firm name, analyst, etc.)
-                    compressed INTEGER DEFAULT 1,  -- Flag for compression
-                    is_pickled INTEGER DEFAULT 1,  -- Flag indicating storage format
-                    UNIQUE(ticker_id, data_type_id) ON CONFLICT REPLACE,
-                    FOREIGN KEY(ticker_id) REFERENCES tickers(id),
-                    FOREIGN KEY(data_type_id) REFERENCES data_types(id)
-                )
-                ''')
-                
-                # Create indexes for performance
-                self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_ticker ON stock_data(ticker_id)')
-                self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_fetch_time ON stock_data(fetch_timestamp)')
-                self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_data_time ON stock_data(data_timestamp)')
-                
-                # Insert initial reference data
-                # Categories
-                categories = [
-                    "General Information",
-                    "Historical Data",
-                    "Financial Statements",
-                    "Analysis & Holdings"
-                ]
-                
-                for category in categories:
-                    self.cursor.execute(
-                        "INSERT OR IGNORE INTO data_categories (name) VALUES (?)",
-                        (category,)
+            if current_version == 0 and self.cursor:
+                try:
+                    # Create metadata table for tracking schema version and other info
+                    self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS metadata (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
                     )
+                    ''')
                 
-                # Data types per category
-                data_types = {
-                    "General Information": ["Basic Info", "Fast Info", "News"],
-                    "Historical Data": ["Price History", "Dividends", "Splits", "Actions", "Capital Gains"],
-                    "Financial Statements": ["Income Statement", "Balance Sheet", "Cash Flow", "Earnings"],
-                    "Analysis & Holdings": [
-                        "Recommendations", "Sustainability", "Analyst Price Targets", 
-                        "Earnings Estimates", "Revenue Estimates", "Major Holders",
-                        "Institutional Holders", "Mutual Fund Holders", "Earnings History",
-                        "EPS Trend", "Growth Estimates", "Insider Transactions", "Upgrades/Downgrades"
-                    ]
-                }
+                    # Create reference tables for normalization
+                    self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS tickers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol TEXT NOT NULL UNIQUE,
+                        name TEXT,
+                        exchange TEXT,
+                        first_fetched DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        last_fetched DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                    ''')
                 
-                for category, types in data_types.items():
-                    # Get category ID
-                    self.cursor.execute("SELECT id FROM data_categories WHERE name = ?", (category,))
-                    category_id = self.cursor.fetchone()[0]
+                    self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS data_categories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL UNIQUE
+                    )
+                    ''')
+                
+                    self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS data_types (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        category_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        UNIQUE(category_id, name),
+                        FOREIGN KEY(category_id) REFERENCES data_categories(id)
+                    )
+                    ''')
+                
+                    # Create main data table with foreign key references
+                    self.cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS stock_data (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ticker_id INTEGER NOT NULL,
+                        data_type_id INTEGER NOT NULL,
+                        data BLOB NOT NULL,
+                        fetch_timestamp DATETIME NOT NULL,
+                        data_timestamp DATETIME,  -- When the data itself was produced/reported
+                        source TEXT,  -- Who produced the data (firm name, analyst, etc.)
+                        compressed INTEGER DEFAULT 1,  -- Flag for compression
+                        is_pickled INTEGER DEFAULT 1,  -- Flag indicating storage format
+                        UNIQUE(ticker_id, data_type_id) ON CONFLICT REPLACE,
+                        FOREIGN KEY(ticker_id) REFERENCES tickers(id),
+                        FOREIGN KEY(data_type_id) REFERENCES data_types(id)
+                    )
+                    ''')
+                
+                    # Create indexes for performance
+                    self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_ticker ON stock_data(ticker_id)')
+                    self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_fetch_time ON stock_data(fetch_timestamp)')
+                    self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_data_time ON stock_data(data_timestamp)')
                     
-                    # Insert data types
-                    for data_type in types:
+                    # Insert initial reference data
+                    # Categories
+                    categories = [
+                        "General Information",
+                        "Historical Data",
+                        "Financial Statements",
+                        "Analysis & Holdings"
+                    ]
+                    
+                    for category in categories:
                         self.cursor.execute(
-                            "INSERT OR IGNORE INTO data_types (category_id, name) VALUES (?, ?)",
-                            (category_id, data_type)
+                            "INSERT OR IGNORE INTO data_categories (name) VALUES (?)",
+                            (category,)
                         )
-                
-                # Set schema version
-                self.cursor.execute(
-                    "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-                    ("schema_version", str(self.schema_version))
-                )
-                
-                conn.commit()
+                    
+                    # Data types per category
+                    data_types = {
+                        "General Information": ["Basic Info", "Fast Info", "News"],
+                        "Historical Data": ["Price History", "Dividends", "Splits", "Actions", "Capital Gains"],
+                        "Financial Statements": ["Income Statement", "Balance Sheet", "Cash Flow", "Earnings"],
+                        "Analysis & Holdings": [
+                            "Recommendations", "Sustainability", "Analyst Price Targets", 
+                            "Earnings Estimates", "Revenue Estimates", "Major Holders",
+                            "Institutional Holders", "Mutual Fund Holders", "Earnings History",
+                            "EPS Trend", "Growth Estimates", "Insider Transactions", "Upgrades/Downgrades"
+                        ]
+                    }
+                    
+                    for category, types in data_types.items():
+                        # Get category ID
+                        self.cursor.execute("SELECT id FROM data_categories WHERE name = ?", (category,))
+                        category_id = self.cursor.fetchone()[0]
+                        
+                        # Insert data types
+                        for data_type in types:
+                            self.cursor.execute(
+                                "INSERT OR IGNORE INTO data_types (category_id, name) VALUES (?, ?)",
+                                (category_id, data_type)
+                            )
+                    
+                    # Set schema version
+                    self.cursor.execute(
+                        "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+                        ("schema_version", str(self.schema_version))
+                    )
+                    
+                    conn.commit()
+                except Exception as e:
+                    print(f"Error creating schema: {e}")
+                    if conn:
+                        conn.rollback()
             
         except Exception as e:
             print(f"Error initializing database: {e}")
-            conn.rollback()
+            if conn:
+                conn.rollback()
         finally:
             self.close()
 
@@ -175,6 +195,9 @@ class DatabaseManager:
         """Get ticker ID or create if not exists, updating last_fetched."""
         try:
             conn = self.connect()
+            if not conn or not self.cursor:
+                print(f"Failed to connect to database while getting ticker ID for {ticker_symbol}")
+                return None
             
             # Check if ticker exists
             self.cursor.execute(
